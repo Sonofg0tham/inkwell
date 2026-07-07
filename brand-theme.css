@@ -1,0 +1,53 @@
+/* Inkwell brand tokens — single source of truth, see brand.md */
+
+@font-face {
+  font-family: 'Fraunces';
+  src: url('/fonts/fraunces-var.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('/fonts/atkinson-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible';
+  src: url('/fonts/atkinson-700.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url('/fonts/plexmono-400.woff2') format('woff2');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --ink-bg: hsl(40 50% 97%);
+  --ink-bg-raised: hsl(42 60% 99%);
+  --ink-bg-sunken: hsl(38 40% 93%);
+  --ink-fg: hsl(230 30% 18%);
+  --ink-accent: hsl(16 85% 58%);
+  --ink-accent-strong: hsl(16 75% 46%);
+  --ink-accent-soft: hsl(16 85% 58% / 0.12);
+  --ink-border: hsl(35 30% 86%);
+  --ink-muted: hsl(35 25% 45%);
+  --ink-success: hsl(150 45% 34%);
+  --ink-danger: hsl(356 72% 52%);
+
+  --ink-radius-control: 0.75rem;
+  --ink-radius-card: 1rem;
+
+  --ink-font-display: 'Fraunces', Georgia, serif;
+  --ink-font-body: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif;
+  --ink-font-mono: 'IBM Plex Mono', Consolas, monospace;
+
+  --ink-shadow-card: 0 2px 8px hsl(230 30% 18% / 0.08), 0 10px 28px hsl(230 30% 18% / 0.07);
+}

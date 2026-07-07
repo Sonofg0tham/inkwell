@@ -1,0 +1,9 @@
+node_modules/
+.output/
+.wxt/
+.remember/
+*.log
+stats.html
+stats-*.json
+.env
+.env.*

@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>Inkwell</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <main class="popup">
+      <header class="masthead">
+        <div id="blotty" class="blotty" aria-hidden="true"></div>
+        <div class="masthead-text">
+          <h1 class="wordmark">Inkwell</h1>
+          <svg class="squiggle" viewBox="0 0 104 8" aria-hidden="true">
+            <path
+              d="M2 5q6.5-5 13 0t13 0t13 0t13 0t13 0t13 0t13 0"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.5"
+              stroke-linecap="round"
+            />
+          </svg>
+        </div>
+      </header>
+
+      <section class="switches" aria-label="Checking">
+        <label class="switch-row">
+          <span class="switch-label">Check my writing</span>
+          <input type="checkbox" id="toggle-global" class="switch" />
+        </label>
+        <label class="switch-row" id="site-row" hidden>
+          <span class="switch-label">On <span id="site-host" class="mono"></span></span>
+          <input type="checkbox" id="toggle-site" class="switch" />
+        </label>
+      </section>
+
+      <section class="status-card" aria-label="Provider status">
+        <div class="status-line">
+          <span id="status-dot" class="status-dot" data-state="idle"></span>
+          <span id="provider-line" class="mono provider-line">Loading…</span>
+          <button id="test-btn" class="btn-ghost" type="button">Test</button>
+        </div>
+        <p id="status-hint" class="status-hint" hidden></p>
+        <p id="issue-line" class="issue-line" hidden></p>
+      </section>
+
+      <footer class="popup-footer">
+        <button id="open-settings" class="btn-link" type="button">Open settings</button>
+      </footer>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,137 @@
+<!doctype html>
+<!-- Inkwell manual test page. NOT shipped with the extension.
+     Open via file:// (enable "Allow access to file URLs" for Inkwell)
+     or serve with: npx serve playground -->
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>Inkwell playground</title>
+    <style>
+      body {
+        font-family: 'Segoe UI', sans-serif;
+        max-width: 760px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        line-height: 1.5;
+      }
+      section {
+        margin-bottom: 2.5rem;
+      }
+      h2 {
+        font-size: 1.05rem;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 4px;
+      }
+      textarea,
+      input[type='text'] {
+        width: 100%;
+        font: inherit;
+        padding: 8px 10px;
+        box-sizing: border-box;
+      }
+      [contenteditable] {
+        border: 1px solid #bbb;
+        border-radius: 4px;
+        padding: 10px 12px;
+        min-height: 90px;
+      }
+      .scrollbox {
+        height: 120px;
+        overflow-y: auto;
+        border: 1px dashed #ccc;
+        padding: 8px;
+      }
+      .note {
+        color: #666;
+        font-size: 0.85rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Inkwell playground</h1>
+    <p class="note">
+      Each field below is pre-filled with deliberate mistakes. Focus a field and wait a second —
+      underlines should appear. Hover one for the suggestion card.
+    </p>
+
+    <section>
+      <h2>1 · Plain textarea (wrapped lines + internal scroll)</h2>
+      <textarea rows="5">
+Their going to recieve the package tommorow, I beleive. Its a shame the weather have been so bad recently, but the team are confidant that everything will arrive on time irregardless of the delays.</textarea>
+    </section>
+
+    <section>
+      <h2>2 · Single-line text input</h2>
+      <input type="text" value="A quik summary of the metting notes" />
+    </section>
+
+    <section>
+      <h2>3 · Contenteditable (rich text with nested elements)</h2>
+      <div contenteditable="true">
+        <p>This paragraf contains a few <strong>obvius</strong> mistakes that Inkwell should find.</p>
+        <p>Me and him was talking about the report yesterday, and we agreed it need more detail.</p>
+      </div>
+    </section>
+
+    <section>
+      <h2>4 · Contenteditable inside a scrollable container</h2>
+      <div class="scrollbox">
+        <div contenteditable="true">
+          <p>Line one has an misteak in it.</p>
+          <p>Line two is fine.</p>
+          <p>Line three also have a problem with subject verb agreement.</p>
+          <p>Line four is fine.</p>
+          <p>Line five mentions the wether being nice.</p>
+        </div>
+      </div>
+      <p class="note">Scroll the box — underlines must track and clip at the edges.</p>
+    </section>
+
+    <section>
+      <h2>5 · React-controlled textarea (Apply must stick)</h2>
+      <div id="react-root"></div>
+      <p class="note">
+        The value lives in React state. After Apply, the mirror text below must show the fix —
+        proof React accepted the change instead of reverting it.
+      </p>
+    </section>
+
+    <section>
+      <h2>6 · Fields Inkwell must ignore</h2>
+      <input type="password" placeholder="password field — never checked" />
+      <input type="text" autocomplete="one-time-code" placeholder="OTP field — never checked" />
+      <textarea data-inkwell-disable rows="2" placeholder="opted out via data-inkwell-disable"></textarea>
+    </section>
+
+    <script
+      crossorigin="anonymous"
+      integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z"
+      src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"
+    ></script>
+    <script
+      crossorigin="anonymous"
+      integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1"
+      src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"
+    ></script>
+    <script>
+      const { useState, createElement: h } = React;
+      function ControlledArea() {
+        const [value, setValue] = useState(
+          'This sentance is controled by React state, so aplying a fix must go threw its event pipeline.',
+        );
+        return h(
+          'div',
+          null,
+          h('textarea', {
+            rows: 3,
+            style: { width: '100%', font: 'inherit', padding: '8px 10px', boxSizing: 'border-box' },
+            value,
+            onChange: (e) => setValue(e.target.value),
+          }),
+          h('p', { className: 'note' }, 'React state mirror: ', h('em', null, value)),
+        );
+      }
+      ReactDOM.createRoot(document.getElementById('react-root')).render(h(ControlledArea));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>Inkwell settings</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="manifest.open_in_tab" content="true" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="masthead">
+        <div id="blotty" class="blotty" aria-hidden="true"></div>
+        <div>
+          <h1 class="wordmark">Inkwell</h1>
+          <p class="strapline">Your words, your model.</p>
+        </div>
+      </header>
+
+      <form id="settings-form" novalidate>
+        <section class="section">
+          <h2 class="section-title">Model</h2>
+          <div class="field">
+            <label for="provider">Where should Inkwell send your text?</label>
+            <select id="provider">
+              <option value="ollama">Ollama (local)</option>
+              <option value="openai-compat">LM Studio / OpenAI-compatible (local or custom)</option>
+              <option value="openai">OpenAI (cloud)</option>
+              <option value="anthropic">Anthropic (cloud)</option>
+            </select>
+            <p class="hint cloud-notice" id="cloud-notice" hidden>
+              Text you type on checked pages is sent to this provider.
+            </p>
+          </div>
+          <div class="field">
+            <label for="base-url">Server address</label>
+            <input type="url" id="base-url" class="mono" spellcheck="false" autocomplete="off" />
+            <p class="hint" id="base-url-hint"></p>
+          </div>
+          <div class="field" id="api-key-field">
+            <label for="api-key">API key</label>
+            <div class="key-row">
+              <input
+                type="password"
+                id="api-key"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Paste your key"
+              />
+              <button type="button" id="remove-key" class="btn-ghost" hidden>Remove key</button>
+            </div>
+            <p class="hint">Stored only on this device, never synced, never logged.</p>
+          </div>
+          <div class="field">
+            <label for="model">Model</label>
+            <div class="key-row">
+              <input
+                type="text"
+                id="model"
+                class="mono"
+                list="model-list"
+                spellcheck="false"
+                autocomplete="off"
+              />
+              <button type="button" id="fetch-models" class="btn-ghost">Fetch models</button>
+            </div>
+            <datalist id="model-list"></datalist>
+            <p class="hint" id="models-hint" hidden></p>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Language &amp; tone</h2>
+          <div class="field">
+            <span class="label">Dialect</span>
+            <div class="radio-row">
+              <label class="radio"><input type="radio" name="dialect" value="en-GB" /> UK English</label>
+              <label class="radio"><input type="radio" name="dialect" value="en-US" /> US English</label>
+            </div>
+          </div>
+          <div class="field-grid">
+            <div class="field">
+              <label for="formality">Formality</label>
+              <select id="formality">
+                <option value="neutral">Neutral</option>
+                <option value="formal">Formal</option>
+                <option value="casual">Casual</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="strictness">Strictness</label>
+              <select id="strictness">
+                <option value="standard">Standard — clear errors only</option>
+                <option value="picky">Picky — style suggestions too</option>
+              </select>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Check for</span>
+            <div class="check-row">
+              <label class="check"><input type="checkbox" id="cat-spelling" /> Spelling</label>
+              <label class="check"><input type="checkbox" id="cat-grammar" /> Grammar</label>
+              <label class="check"><input type="checkbox" id="cat-punctuation" /> Punctuation</label>
+              <label class="check"><input type="checkbox" id="cat-style" /> Style</label>
+            </div>
+          </div>
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">Sites</h2>
+          <div class="field">
+            <label for="blocklist">Never check on these sites (one per line)</label>
+            <textarea
+              id="blocklist"
+              class="mono"
+              rows="4"
+              spellcheck="false"
+              placeholder="mail.example.com&#10;secret-diary.example.org"
+            ></textarea>
+          </div>
+        </section>
+
+        <div class="save-row">
+          <button type="submit" id="save-btn" class="btn-primary">Save &amp; test</button>
+          <p id="save-result" class="save-result" role="status" hidden></p>
+        </div>
+      </form>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
