@@ -17,18 +17,64 @@
       </header>
 
       <form id="settings-form" novalidate>
+        <section
+          id="privacy-consent"
+          class="consent-panel"
+          aria-labelledby="privacy-consent-title"
+          data-state="pending"
+        >
+          <p class="consent-eyebrow">Privacy checkpoint</p>
+          <h2 id="privacy-consent-title" class="consent-title" tabindex="-1">
+            Before Inkwell reads your writing
+          </h2>
+          <p class="consent-lede">
+            You decide when Inkwell can process text and where that text goes.
+          </p>
+          <div class="consent-ledger">
+            <article>
+              <p class="consent-step">On this device</p>
+              <h3>Page and document text</h3>
+              <p>Form text and other user-generated text are handled locally by the extension first.</p>
+            </article>
+            <article>
+              <p class="consent-step">Only when checking</p>
+              <h3>Your chosen provider</h3>
+              <p>
+                Text is sent only to the provider you choose. A local provider keeps it on your
+                machine. With a cloud provider, every website stays off until you enable that site.
+                Workspace documents are sent to that provider when Inkwell checks them.
+              </p>
+            </article>
+          </div>
+          <p class="consent-storage">
+            Provider keys, settings and workspace documents are stored locally in this browser profile.
+            Inkwell has no account, no telemetry and no ads.
+          </p>
+          <label class="consent-check" for="data-consent">
+            <input type="checkbox" id="data-consent" />
+            <span>I understand and agree to Inkwell processing my writing in this way.</span>
+          </label>
+          <p id="consent-state" class="consent-state" role="status"></p>
+        </section>
+
         <section class="section">
           <h2 class="section-title">Model</h2>
           <div class="field">
             <label for="provider">Where should Inkwell send your text?</label>
             <select id="provider">
-              <option value="ollama">Ollama (local)</option>
-              <option value="openai-compat">LM Studio / OpenAI-compatible (local or custom)</option>
-              <option value="openai">OpenAI (cloud)</option>
-              <option value="anthropic">Anthropic (cloud)</option>
+              <optgroup label="On this device — private, free">
+                <option value="ollama">Ollama (local)</option>
+                <option value="openai-compat">LM Studio / OpenAI-compatible (local or custom)</option>
+              </optgroup>
+              <optgroup label="Cloud — bring your own API key">
+                <option value="openrouter">OpenRouter (many models, free options)</option>
+                <option value="gemini">Google Gemini (generous free tier)</option>
+                <option value="openai">OpenAI</option>
+                <option value="anthropic">Anthropic</option>
+              </optgroup>
             </select>
             <p class="hint cloud-notice" id="cloud-notice" hidden>
-              Text you type on checked pages is sent to this provider.
+              Website text is sent only on sites you enable. Workspace documents are sent when Inkwell checks them.
             </p>
           </div>
           <div class="field">
@@ -49,6 +95,7 @@
               <button type="button" id="remove-key" class="btn-ghost" hidden>Remove key</button>
             </div>
             <p class="hint">Stored only on this device, never synced, never logged.</p>
+            <p class="hint" id="key-help" hidden><a id="key-help-link" href="#" target="_blank" rel="noreferrer noopener"></a></p>
           </div>
           <div class="field">
             <label for="model">Model</label>
@@ -75,6 +122,9 @@
             <div class="radio-row">
               <label class="radio"><input type="radio" name="dialect" value="en-GB" /> UK English</label>
               <label class="radio"><input type="radio" name="dialect" value="en-US" /> US English</label>
+              <label class="radio"><input type="radio" name="dialect" value="en-CA" /> Canadian English</label>
+              <label class="radio"><input type="radio" name="dialect" value="en-AU" /> Australian English</label>
+              <label class="radio"><input type="radio" name="dialect" value="en-IN" /> Indian English</label>
             </div>
           </div>
           <div class="field-grid">
@@ -103,6 +153,29 @@
               <label class="check"><input type="checkbox" id="cat-style" /> Style</label>
             </div>
           </div>
+        </section>
+
+        <section class="section" aria-labelledby="dictionary-title">
+          <h2 id="dictionary-title" class="section-title">Personal dictionary</h2>
+          <p class="section-intro">
+            Inkwell will leave these words alone. Add a single word, including an apostrophe or hyphen.
+          </p>
+          <div class="dictionary-add-row">
+            <label class="sr-only" for="dictionary-word">Word to add</label>
+            <input
+              type="text"
+              id="dictionary-word"
+              maxlength="80"
+              autocomplete="off"
+              spellcheck="false"
+              placeholder="Add a word"
+            />
+            <button type="button" id="dictionary-add" class="btn-ghost">Add word</button>
+          </div>
+          <p id="dictionary-status" class="hint" role="status"></p>
+          <div id="dictionary-empty" class="dictionary-empty">No saved words yet.</div>
+          <ul id="dictionary-list" class="dictionary-list" aria-label="Saved personal dictionary words"></ul>
+          <button type="button" id="dictionary-clear" class="btn-ghost dictionary-clear">Clear dictionary</button>
         </section>
 
         <section class="section">

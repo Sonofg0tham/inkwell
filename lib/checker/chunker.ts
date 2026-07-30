@@ -8,8 +8,26 @@ export interface Chunk {
 }
 
 const MAX_CHUNK_CHARS = 1200;
-const MIN_CHUNK_CHARS = 12;
+const MIN_CHUNK_CHARS = 3;
 const HAS_LETTER = /\p{L}/u;
+
+function pushBoundedChunk(chunks: Chunk[], text: string, docOffset: number): void {
+  let from = 0;
+  while (text.length - from > MAX_CHUNK_CHARS) {
+    const window = text.slice(from, from + MAX_CHUNK_CHARS + 1);
+    const whitespace = window.lastIndexOf(' ');
+    const length = whitespace >= Math.floor(MAX_CHUNK_CHARS / 2)
+      ? whitespace + 1
+      : MAX_CHUNK_CHARS;
+    const piece = text.slice(from, from + length);
+    chunks.push({ text: piece, docOffset: docOffset + from, hash: fnvHash(piece) });
+    from += length;
+  }
+  const piece = text.slice(from);
+  if (piece.length > 0) {
+    chunks.push({ text: piece, docOffset: docOffset + from, hash: fnvHash(piece) });
+  }
+}
 
 /** Regroups sentences greedily into pieces of at most MAX_CHUNK_CHARS. */
 function splitLongParagraph(text: string, docOffset: number, dialect: string): Chunk[] {
@@ -27,7 +45,7 @@ function splitLongParagraph(text: string, docOffset: number, dialect: string): C
   const flush = () => {
     if (pieceEnd > pieceStart) {
       const piece = text.slice(pieceStart, pieceEnd);
-      chunks.push({ text: piece, docOffset: docOffset + pieceStart, hash: fnvHash(piece) });
+      pushBoundedChunk(chunks, piece, docOffset + pieceStart);
     }
   };
   for (const s of sentences) {

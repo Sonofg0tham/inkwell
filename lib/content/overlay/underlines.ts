@@ -42,8 +42,10 @@ export class UnderlineLayer {
     for (const spec of specs) {
       for (const rect of spec.rects) {
         if (rect.width < 2) continue;
-        const seg = document.createElement('div');
+        const seg = document.createElement('button');
+        seg.type = 'button';
         seg.className = 'ink-seg';
+        seg.setAttribute('aria-label', `${TYPE_LABELS[spec.type]} suggestion. Activate to review.`);
         seg.style.left = `${rect.left}px`;
         seg.style.top = `${rect.top + rect.height - UNDERLINE_HEIGHT}px`;
         seg.style.width = `${rect.width}px`;
@@ -52,8 +54,13 @@ export class UnderlineLayer {
         const anchor: Rect = { ...rect };
         seg.addEventListener('pointerenter', () => this.callbacks.onEnter(spec.issueId, anchor));
         seg.addEventListener('pointerleave', () => this.callbacks.onLeave(spec.issueId));
+        // Prevent pointer focus from leaving the editable. Keyboard users get
+        // the button's native Enter and Space activation through `click`.
         seg.addEventListener('pointerdown', (e) => {
           e.preventDefault();
+          e.stopPropagation();
+        });
+        seg.addEventListener('click', (e) => {
           e.stopPropagation();
           this.callbacks.onPress(spec.issueId, anchor);
         });

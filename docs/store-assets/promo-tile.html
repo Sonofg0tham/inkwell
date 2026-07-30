@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=440, initial-scale=1" />
+    <title>Inkwell Chrome Web Store promotional tile</title>
+    <style>
+      @font-face {
+        font-family: 'Fraunces';
+        src: url('../../public/fonts/fraunces-var.woff2') format('woff2-variations');
+        font-weight: 100 900;
+        font-style: normal;
+      }
+
+      @font-face {
+        font-family: 'Atkinson Hyperlegible';
+        src: url('../../public/fonts/atkinson-400.woff2') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+      }
+
+      @font-face {
+        font-family: 'Atkinson Hyperlegible';
+        src: url('../../public/fonts/atkinson-700.woff2') format('woff2');
+        font-weight: 700;
+        font-style: normal;
+      }
+
+      :root {
+        --paper: hsl(40 50% 97%);
+        --paper-raised: hsl(42 60% 99%);
+        --ink: hsl(230 30% 18%);
+        --muted: hsl(35 25% 40%);
+        --rule: hsl(35 30% 86%);
+        --coral: hsl(16 80% 42%);
+        --coral-bright: hsl(16 85% 58%);
+        --display: 'Fraunces', Georgia, serif;
+        --body: 'Atkinson Hyperlegible', 'Segoe UI', sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+
+      html,
+      body {
+        width: 440px;
+        height: 280px;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      body {
+        position: relative;
+        color: var(--ink);
+        background-color: var(--paper);
+        background-image:
+          radial-gradient(circle at 1px 1px, hsl(35 30% 80% / 0.42) 1px, transparent 1px),
+          linear-gradient(90deg, transparent 0 31px, hsl(16 85% 58% / 0.2) 31px 33px, transparent 33px);
+        background-size: 18px 18px, 100% 100%;
+        font-family: var(--body);
+      }
+
+      .tile {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-columns: 1fr 132px;
+        gap: 12px;
+        padding: 27px 20px 24px 44px;
+        border-top: 6px solid var(--coral);
+      }
+
+      .copy {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .eyebrow {
+        margin: 0 0 9px;
+        color: var(--coral);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 235px;
+        font-family: var(--display);
+        font-size: 40px;
+        font-variation-settings: 'SOFT' 100, 'WONK' 1;
+        font-weight: 620;
+        letter-spacing: -0.035em;
+        line-height: 0.92;
+        white-space: nowrap;
+      }
+
+      .subhead {
+        max-width: 235px;
+        margin: 12px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.28;
+      }
+
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-top: auto;
+        font-family: var(--display);
+        font-size: 17px;
+        font-variation-settings: 'SOFT' 100, 'WONK' 1;
+        font-weight: 650;
+        letter-spacing: -0.015em;
+      }
+
+      .wordmark::after {
+        content: '';
+        width: 54px;
+        height: 5px;
+        background: repeating-linear-gradient(
+          90deg,
+          var(--ink) 0 8px,
+          transparent 8px 11px
+        );
+        opacity: 0.86;
+        transform: rotate(-1deg);
+      }
+
+      .paper-card {
+        position: relative;
+        align-self: center;
+        width: 132px;
+        height: 178px;
+        padding: 24px 18px;
+        border: 1px solid var(--rule);
+        background:
+          repeating-linear-gradient(
+            to bottom,
+            transparent 0 28px,
+            hsl(35 30% 86% / 0.75) 28px 29px
+          ),
+          var(--paper-raised);
+        box-shadow: 8px 9px 0 hsl(16 85% 58% / 0.2);
+        transform: rotate(2.5deg);
+      }
+
+      .paper-card::before {
+        content: '';
+        position: absolute;
+        inset: -8px auto auto 23px;
+        width: 64px;
+        height: 17px;
+        background: hsl(38 92% 72% / 0.62);
+        transform: rotate(-4deg);
+      }
+
+      .paper-card::after {
+        content: '';
+        position: absolute;
+        right: 12px;
+        bottom: 17px;
+        width: 74px;
+        height: 7px;
+        border-radius: 99px;
+        background: var(--coral-bright);
+        box-shadow:
+          -15px 12px 0 -2px var(--ink),
+          9px 24px 0 -2px var(--ink);
+        transform: rotate(-2deg);
+      }
+
+      .mascot {
+        display: block;
+        width: 94px;
+        height: 94px;
+        margin: 6px auto 0;
+        object-fit: contain;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="tile" aria-label="Inkwell, private proofreading with your own model">
+      <section class="copy">
+        <p class="eyebrow">Private proofreading</p>
+        <h1>Your words.<br />Your model.</h1>
+        <p class="subhead">Spelling and grammar checks across the web.</p>
+        <div class="wordmark">Inkwell</div>
+      </section>
+      <div class="paper-card" aria-hidden="true">
+        <img class="mascot" src="../../public/icon/128.png" alt="" />
+      </div>
+    </main>
+  </body>
+</html>

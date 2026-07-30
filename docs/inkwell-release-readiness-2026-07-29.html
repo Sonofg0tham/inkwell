@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkwell public beta release readiness - updated 30 July 2026</title>
+<style>
+  :root {
+    --paper: #fbf7ed;
+    --raised: #fffdf8;
+    --ink: #22263a;
+    --muted: #686354;
+    --line: #ded5c3;
+    --coral: #c7461c;
+    --coral-soft: #f8ded2;
+    --green: #216b49;
+    --green-soft: #dceee5;
+    --amber: #85530f;
+    --amber-soft: #f5e8c9;
+    --red: #a3262f;
+    --red-soft: #f7dfe1;
+    --navy-soft: #e5e8f1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #17191f;
+      --raised: #20232b;
+      --ink: #f4eee2;
+      --muted: #bdb5a7;
+      --line: #3b3d44;
+      --coral: #f0835e;
+      --coral-soft: #4d2c26;
+      --green: #78c79f;
+      --green-soft: #203b30;
+      --amber: #f1bd67;
+      --amber-soft: #42351f;
+      --red: #ff8b94;
+      --red-soft: #48262b;
+      --navy-soft: #29303f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2.5rem 1.25rem 5rem;
+    color: var(--ink);
+    background:
+      linear-gradient(90deg, transparent 0 2.1rem, color-mix(in srgb, var(--coral) 12%, transparent) 2.1rem 2.16rem, transparent 2.16rem),
+      radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--line) 50%, transparent) 1px, transparent 1px),
+      var(--paper);
+    background-size: auto, 18px 18px, auto;
+    font: 17px/1.65 Verdana, "Trebuchet MS", sans-serif;
+  }
+  main { max-width: 72ch; margin: 0 auto; }
+  h1, h2, h3 {
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.2;
+    letter-spacing: -.015em;
+  }
+  h1 { max-width: 20ch; margin: .4rem 0 .65rem; font-size: clamp(2.1rem, 6vw, 3.4rem); }
+  h2 { margin: 3rem 0 1rem; padding-top: 1.25rem; border-top: 1px solid var(--line); font-size: 1.55rem; }
+  h3 { margin: 0 0 .5rem; font-size: 1.12rem; }
+  p, li { margin: 0 0 .9rem; }
+  ul, ol { padding-left: 1.35rem; }
+  a { color: var(--coral); text-underline-offset: .17em; }
+  code {
+    padding: .08em .35em;
+    border: 1px solid var(--line);
+    border-radius: .3rem;
+    background: var(--raised);
+    font: .9em/1.4 Consolas, "Cascadia Code", monospace;
+    overflow-wrap: anywhere;
+  }
+  .masthead { display: flex; align-items: center; gap: .85rem; }
+  .mark { width: 54px; height: 54px; flex: 0 0 auto; }
+  .eyebrow { margin: 0; color: var(--coral); font-size: .78rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+  .lead { max-width: 63ch; color: var(--muted); font-size: 1.06rem; }
+  .verdict, .callout, .issue {
+    margin: 1.35rem 0;
+    padding: 1rem 1.1rem;
+    border: 1px solid var(--line);
+    border-left-width: 5px;
+    border-radius: 0 .6rem .6rem 0;
+    background: var(--raised);
+  }
+  .verdict { border-left-color: var(--green); background: var(--green-soft); }
+  .verdict strong, .callout strong { display: block; margin-bottom: .35rem; }
+  .callout { border-left-color: var(--coral); }
+  .issue.medium { border-left-color: var(--amber); background: var(--amber-soft); }
+  .issue.low { border-left-color: var(--coral); background: var(--coral-soft); }
+  .issue.scope { border-left-color: var(--ink); background: var(--navy-soft); }
+  .badge { display: inline-block; margin-right: .45rem; padding: .15rem .45rem; border-radius: 99px; font: 700 .72rem/1.3 Verdana, sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+  .badge.medium { color: var(--amber); background: color-mix(in srgb, var(--amber-soft) 78%, var(--raised)); }
+  .badge.low { color: var(--red); background: var(--red-soft); }
+  .badge.scope { color: var(--ink); background: var(--raised); }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: .7rem; margin: 1.5rem 0; }
+  .fact { min-width: 0; padding: .9rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--raised); }
+  .fact b { display: block; color: var(--coral); font: 700 1.65rem/1 Georgia, serif; }
+  .fact span { display: block; margin-top: .35rem; color: var(--muted); font-size: .78rem; line-height: 1.35; }
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+  .card { padding: 1rem; border: 1px solid var(--line); border-radius: .55rem; background: var(--raised); }
+  .card p:last-child, .issue p:last-child { margin-bottom: 0; }
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: .55rem; background: var(--raised); }
+  table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+  th, td { padding: .7rem .75rem; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { color: var(--muted); font-size: .76rem; letter-spacing: .05em; text-transform: uppercase; }
+  .pass { color: var(--green); font-weight: 700; }
+  .path { overflow-wrap: anywhere; }
+  .footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+  @media (max-width: 720px) {
+    body { padding: 1.5rem 1rem 4rem; }
+    .facts, .cards { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 440px) {
+    .facts, .cards { grid-template-columns: 1fr; }
+    th, td { padding: .55rem; }
+  }
+  @media print {
+    body { background: #fff; color: #111; padding: 1cm; }
+    .fact, .card, .issue, .verdict { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="masthead">
+      <svg class="mark" viewBox="0 0 64 64" role="img" aria-label="Inkwell ink-drop mark">
+        <path d="M32 4C24 18 13 27 13 40a19 19 0 0038 0C51 27 40 18 32 4z" fill="#22263a"/>
+        <circle cx="25" cy="38" r="3.7" fill="#fffdf8"/><circle cx="39" cy="38" r="3.7" fill="#fffdf8"/>
+        <path d="M24 47c5 5 11 5 16 0" fill="none" stroke="#fffdf8" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+      <p class="eyebrow">Final release gate | updated 30 July 2026</p>
+    </div>
+    <h1>Ready for a controlled public beta</h1>
+    <p class="lead">The hardened Chrome and Edge build passed the exact packaged-extension test and a real local Ollama acceptance corpus. The remaining work is account-side publication setup, not an extension defect.</p>
+  </header>
+
+  <div class="verdict">
+    <strong>Technical verdict: shareable as a Chrome and Edge public beta.</strong>
+    Core spelling and grammar checking now works across the main web-editor types with reliable local fallback, accessible correction controls, explicit privacy consent and a tested release archive. It must not be marketed as full Grammarly feature parity.
+  </div>
+
+  <div class="facts" aria-label="Release facts">
+    <div class="fact"><b>332</b><span>deterministic tests passed</span></div>
+    <div class="fact"><b>7</b><span>real Qwen acceptance tests passed</span></div>
+    <div class="fact"><b>4</b><span>real Chromium editor types checked</span></div>
+    <div class="fact"><b>0</b><span>dependency vulnerabilities found</span></div>
+  </div>
+
+  <h2>Straight answer</h2>
+  <p>Inkwell is now suitable for supervised personal use and a clearly labelled public beta. The normal editing path is real, including a single-line input, textarea, contenteditable editor and an embedded <code>srcdoc</code> editor.</p>
+  <p>The exact ZIP was extracted and installed into fresh Chromium. Trusted typing produced a suggestion and badge, keyboard Apply changed <code>teh</code> to <code>the</code> in each top-level editor, and the embedded editor completed its check without console, page or runtime errors.</p>
+  <p>It is not equivalent to the full Grammarly product. The beta does not include Google Docs, multilingual checking, Firefox or Safari, collaborative documents, plagiarism detection, or generative rewrite tools.</p>
+
+  <h2>What changed</h2>
+  <div class="cards">
+    <article class="card">
+      <h3>Proofreading reliability</h3>
+      <p>Five English dictionaries and high-confidence grammar rules now run locally. They still return useful corrections when the contextual model fails.</p>
+      <p>Long documents are chunked safely, short fields such as <code>teh</code> are checked, stale requests are cancelled and model results are anchored to exact source text.</p>
+    </article>
+    <article class="card">
+      <h3>Privacy and security</h3>
+      <p>First-run consent is mandatory. Remote custom endpoints follow the same per-site rule as built-in cloud providers.</p>
+      <p>HTTP is limited to <code>localhost</code> and <code>127.0.0.1</code>. Other endpoints need HTTPS and an exact runtime grant. Website content scripts never receive provider credentials.</p>
+    </article>
+    <article class="card">
+      <h3>Web editing</h3>
+      <p>Field discovery now covers dynamic editors, nested open shadow roots and same-origin blank frames while using metadata to skip recognised sensitive and code fields.</p>
+      <p>The badge aggregates frame state, errors remain visible, and closed-shadow controls prevent page CSS or scripts from reading suggestion text.</p>
+    </article>
+    <article class="card">
+      <h3>Usability and access</h3>
+      <p>Suggestion cards support keyboard focus, Escape, Tab loops, Apply, Dismiss, Ignore all and Add to dictionary. The re-entrant keyboard Apply crash found by the installed test is fixed.</p>
+      <p>Settings now expose five dialects and personal dictionary management. Desktop and 390px mobile views were captured and reviewed.</p>
+    </article>
+    <article class="card">
+      <h3>Provider safety</h3>
+      <p>Saved endpoints are validated again in the background. Connection tests require a structured proofreading completion instead of accepting a reachable but unsuitable model.</p>
+      <p>Gemini requests omit a deprecated sampling field, model output is schema-limited, page prompt injection is treated as untrusted data and results are never auto-applied.</p>
+    </article>
+    <article class="card">
+      <h3>Release engineering</h3>
+      <p>CI now audits the full dependency tree, typechecks, runs capped-worker tests, builds Chrome and Edge, installs pinned Chromium and smoke-tests the extension.</p>
+      <p>WXT and Playwright are pinned, the old vulnerable runner chain is gone, and the release checklist includes exact-ZIP and store-policy gates.</p>
+    </article>
+  </div>
+
+  <h2>Verification evidence</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Gate</th><th>Result</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Clean install and audit</td><td class="pass">Pass</td><td><code>npm ci</code>, 215 packages audited, zero vulnerabilities. Legacy advisory packages absent.</td></tr>
+        <tr><td>TypeScript</td><td class="pass">Pass</td><td><code>tsc --noEmit</code>.</td></tr>
+        <tr><td>Vitest</td><td class="pass">Pass</td><td>335 passed, six opt-in real-model cases skipped in the deterministic run. Consecutive full runs also passed.</td></tr>
+        <tr><td>Real Ollama pipeline</td><td class="pass">Pass</td><td><code>qwen2.5:7b-instruct</code> passed the structured prompt, parse and anchor test.</td></tr>
+        <tr><td>Real-model corpus</td><td class="pass">Pass</td><td>Six of six native and OpenAI-compatible probes passed. All 22 returned items survived schema validation and exact anchoring. Observed calls took roughly 0.53 to 1.52 seconds.</td></tr>
+        <tr><td>Installed Chromium</td><td class="pass">Pass</td><td>Input, textarea, contenteditable and <code>srcdoc</code> frame. Badge, closed-shadow UI and keyboard Apply verified.</td></tr>
+        <tr><td>Chrome and Edge</td><td class="pass">Pass</td><td>Both 4.48 MB MV3 builds completed with a Chrome 102 minimum, local-only required hosts and HTTPS-only optional hosts. Microsoft Edge 150 also passed the installed-extension smoke test directly.</td></tr>
+        <tr><td>Exact release ZIP</td><td class="pass">Pass</td><td>Fresh archive extracted and installed. The four-editor smoke test passed in 6.6 seconds.</td></tr>
+        <tr><td>Archive hygiene</td><td class="pass">Pass</td><td>32 entries, with no test artefacts, credentials, environment files or source maps.</td></tr>
+        <tr><td>Store artwork</td><td class="pass">Pass</td><td>128px icon, 440 x 280 tile and three 1280 x 800 screenshots dimension-checked and visually reviewed.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Issues and limits still open</h2>
+  <article class="issue medium">
+    <h3><span class="badge medium">Medium</span>Public security and privacy links are not live yet</h3>
+    <p><code>PRIVACY.md</code> and <code>SECURITY.md</code> are included in the release branch, but their final <code>main</code> branch URLs will not resolve until the pull request is merged. Private vulnerability reporting is disabled on the GitHub repository.</p>
+    <p><strong>Fix:</strong> merge the reviewed release pull request, then enable <strong>Settings &gt; Security &gt; Code security and analysis &gt; Private vulnerability reporting</strong>. Verify both public links in a signed-out browser before submitting the store listing.</p>
+  </article>
+  <article class="issue medium">
+    <h3><span class="badge medium">Medium</span>The declared Chrome 102 floor was not directly exercised</h3>
+    <p>The packaged extension passed on current Playwright Chromium and Microsoft Edge 150. Chrome 102 is the declared compatibility floor, but this pass did not run that older browser version.</p>
+    <p><strong>Fix:</strong> before calling the release stable, smoke-test Chrome 102 and Edge 102, or raise <code>minimum_chrome_version</code> to a version covered by the compatibility test matrix.</p>
+  </article>
+  <article class="issue medium">
+    <h3><span class="badge medium">Medium</span>Sensitive-field detection remains heuristic</h3>
+    <p>Inkwell uses field types, autocomplete values, labels and common editor markers. A custom field can hide its purpose from every browser extension.</p>
+    <p><strong>Fix:</strong> this limit is disclosed in the product and policy. Users should disable Inkwell on sensitive sites and prefer a local provider where possible. Future releases can extend the metadata patterns as real cases are reported.</p>
+  </article>
+  <article class="issue low">
+    <h3><span class="badge low">Low</span>Model issue categories are not always precise</h3>
+    <p>Qwen corrected the planted errors, but sometimes labelled grammar corrections as spelling. The correction still anchors and applies safely, though category filters may be imperfect.</p>
+    <p><strong>Fix:</strong> keep deterministic rules authoritative, retain the structured model qualification and review category accuracy when evaluating future default models.</p>
+  </article>
+  <article class="issue scope">
+    <h3><span class="badge scope">Product scope</span>No full Grammarly parity claim</h3>
+    <p>The public copy now calls Inkwell a Chromium beta and lists the unsupported surfaces. Closing the remaining commercial-suite gap would be a product roadmap, not a release hardening patch.</p>
+  </article>
+
+  <h2>Release files</h2>
+  <p class="path"><strong>Chrome ZIP:</strong> <code>C:\Repos\Inkwell\.output\inkwell-0.1.0-chrome.zip</code></p>
+  <p><strong>Size:</strong> 1,555,815 bytes</p>
+  <p><strong>SHA-256:</strong> <code>5DD918424022C0451B99CE7F39258064A81C8EC7393E27BBAD5B765154E82FB3</code></p>
+  <p class="path"><strong>Store assets:</strong> <code>C:\Repos\Inkwell\docs\store-assets</code></p>
+  <p class="path"><strong>Listing pack:</strong> <code>C:\Repos\Inkwell\docs\chrome-web-store-listing.md</code></p>
+
+  <h2>What Craig needs to do next</h2>
+  <ol>
+    <li>Review and merge the draft release pull request after its checks pass.</li>
+    <li>Enable private vulnerability reporting in the GitHub repository settings.</li>
+    <li>Open the privacy and security links in a signed-out browser.</li>
+    <li>Upload the exact ZIP and prepared artwork to the Chrome Web Store dashboard.</li>
+    <li>Complete the privacy answers from the listing pack, save as a draft, then submit for review when the account-side checks are green.</li>
+  </ol>
+
+  <div class="callout">
+    <strong>Chrome policy note</strong>
+    Local processing and storage still count as user-data handling, which is why the first-run disclosure and privacy policy are required. Chrome also requires accurate privacy declarations and current listing assets. See the official <a href="https://developer.chrome.com/docs/webstore/program-policies/user-data-faq">user-data FAQ</a>, <a href="https://developer.chrome.com/blog/cws-policy-updates-2026">2026 policy update</a>, <a href="https://developer.chrome.com/docs/webstore/cws-dashboard-privacy">privacy dashboard guidance</a> and <a href="https://developer.chrome.com/docs/webstore/images">image requirements</a>.
+  </div>
+
+  <p class="footer">Prepared from the final local working tree and exact release archive, then updated after the Chrome and Edge release checks on 30 July 2026. This report supersedes the pre-fix audit.</p>
+</main>
+</body>
+</html>

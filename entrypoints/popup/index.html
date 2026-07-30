@@ -44,8 +44,39 @@
         <p id="issue-line" class="issue-line" hidden></p>
       </section>
 
+      <section class="quick-settings" aria-labelledby="quick-settings-title">
+        <div class="section-heading">
+          <h2 id="quick-settings-title">Quick settings</h2>
+          <span class="section-kicker">This device</span>
+        </div>
+        <div class="quick-category-grid" role="group" aria-label="Checks to run">
+          <label class="quick-check"><input id="quick-cat-spelling" type="checkbox" data-category="spelling" /> <span>Spelling</span></label>
+          <label class="quick-check"><input id="quick-cat-grammar" type="checkbox" data-category="grammar" /> <span>Grammar</span></label>
+          <label class="quick-check"><input id="quick-cat-punctuation" type="checkbox" data-category="punctuation" /> <span>Punctuation</span></label>
+          <label class="quick-check"><input id="quick-cat-style" type="checkbox" data-category="style" /> <span>Style</span></label>
+        </div>
+        <div class="quick-selects">
+          <label for="quick-strictness">Review depth
+            <select id="quick-strictness">
+              <option value="standard">Standard</option>
+              <option value="picky">Detailed</option>
+            </select>
+          </label>
+          <label for="quick-dialect">Writing in
+            <select id="quick-dialect">
+              <option value="en-GB">UK English</option>
+              <option value="en-US">US English</option>
+              <option value="en-CA">Canadian English</option>
+              <option value="en-AU">Australian English</option>
+              <option value="en-IN">Indian English</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
       <footer class="popup-footer">
-        <button id="open-settings" class="btn-link" type="button">Open settings</button>
+        <button id="open-workspace" class="btn-primary" type="button">Open workspace</button>
+        <button id="open-settings" class="btn-link" type="button">Settings</button>
       </footer>
     </main>
     <script type="module" src="./main.ts"></script>

@@ -8,9 +8,18 @@ import {
   type TestResult,
 } from './types';
 
-const ORIGIN_HINT =
-  'Ollama rejected the extension (HTTP 403). Restart it with the environment variable ' +
-  'OLLAMA_ORIGINS=chrome-extension://* (or OLLAMA_ORIGINS=*) so extensions may connect.';
+function originHint(): string {
+  let extensionOrigin = 'the exact chrome-extension:// origin shown in Inkwell Settings';
+  try {
+    extensionOrigin = chrome.runtime.getURL('').replace(/\/$/, '');
+  } catch {
+    // Keep the fallback useful in non-extension test and diagnostic contexts.
+  }
+  return (
+    'Ollama rejected the extension (HTTP 403). Restart it with the environment variable ' +
+    `OLLAMA_ORIGINS=${extensionOrigin}. Do not use a wildcard.`
+  );
+}
 
 const NETWORK_HINT = 'Could not reach Ollama. Is it running? Try "ollama serve" in a terminal.';
 
@@ -33,7 +42,7 @@ export const ollamaProvider: Provider = {
       NETWORK_HINT,
     );
     await ensureOk(res, {
-      403: { code: 'cors_origin', hint: ORIGIN_HINT },
+      403: { code: 'cors_origin', hint: originHint() },
       404: {
         code: 'not_found',
         hint: `Model "${cfg.model}" not found. Pull it first: ollama pull ${cfg.model}`,
@@ -49,7 +58,7 @@ export const ollamaProvider: Provider = {
 
   async listModels(cfg: ResolvedProviderConfig) {
     const res = await fetchWithTimeout(`${cfg.baseUrl}/api/tags`, {}, undefined, NETWORK_HINT);
-    await ensureOk(res, { 403: { code: 'cors_origin', hint: ORIGIN_HINT } });
+    await ensureOk(res, { 403: { code: 'cors_origin', hint: originHint() } });
     const json = await res.json();
     const models = Array.isArray(json?.models)
       ? json.models.map((m: { name?: string }) => m?.name).filter((n: unknown): n is string => typeof n === 'string')

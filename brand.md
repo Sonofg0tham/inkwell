@@ -10,9 +10,15 @@ Fonts:
 Palette (HSL):
 - Background: 40 50% 97% (warm cream)
 - Foreground: 230 30% 18% (ink navy)
-- Accent: 16 85% 58% (warm coral — one accent only)
+- Accent: warm coral, hue 16 — one accent only, as a ramp:
+  - bright 16 85% 58% (decoration: glows, washes, badge)
+  - base 16 80% 42% (button fills — AA with white text)
+  - strong 16 85% 30% (links and accent text on cream)
 - Border: 35 30% 86%
 - Muted: 35 25% 45%
+
+Never teal or green as accent (Grammarly's lane). Green appears only as the
+semantic success colour.
 
 Radius scale: 0.75rem controls, 1rem cards
 

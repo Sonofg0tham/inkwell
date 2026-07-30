@@ -4,6 +4,9 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
     "dev": "wxt",
     "dev:edge": "wxt -b edge",
@@ -12,21 +15,29 @@
     "zip": "wxt zip",
     "postinstall": "wxt prepare",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run --maxWorkers=4",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install chromium"
   },
   "dependencies": {
+    "dictionary-en": "^4.0.0",
+    "dictionary-en-au": "^3.0.0",
+    "dictionary-en-ca": "^3.0.0",
+    "dictionary-en-gb": "^3.0.0",
+    "nspell": "^2.1.5",
+    "pdfjs-dist": "^6.1.200",
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.61.1",
     "@types/chrome": "^0.0.280",
+    "happy-dom": "^20.10.6",
     "typescript": "~5.8.3",
     "vitest": "^4.1.10",
-    "wxt": "^0.20.0"
+    "wxt": "0.21.2"
   },
   "overrides": {
     "esbuild": "^0.28.1",
-    "shell-quote": "^1.8.4",
-    "tmp": "^0.2.6",
-    "uuid": "^11.1.1"
+    "postcss": "^8.5.18"
   }
 }

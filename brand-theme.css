@@ -34,9 +34,15 @@
   --ink-bg-raised: hsl(42 60% 99%);
   --ink-bg-sunken: hsl(38 40% 93%);
   --ink-fg: hsl(230 30% 18%);
-  --ink-accent: hsl(16 85% 58%);
-  --ink-accent-strong: hsl(16 75% 46%);
-  --ink-accent-soft: hsl(16 85% 58% / 0.12);
+  /* Accent = warm coral (brand.md), a three-step ramp:
+     bright for decoration, base for fills (AA with white text), strong for
+     text/links on cream. Never teal/green — that's Grammarly's lane. */
+  --ink-accent: hsl(16 80% 42%);
+  --ink-accent-strong: hsl(16 85% 30%);
+  --ink-accent-soft: hsl(16 85% 58% / 0.14);
+  --ink-accent-bright: hsl(16 85% 58%);
+  --ink-amber: hsl(38 92% 52%);
+  --ink-amber-soft: hsl(38 92% 52% / 0.15);
   --ink-border: hsl(35 30% 86%);
   --ink-muted: hsl(35 25% 45%);
   --ink-success: hsl(150 45% 34%);

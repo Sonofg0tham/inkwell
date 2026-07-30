@@ -1,0 +1,9 @@
+name: Inkwell CodeQL configuration
+
+# These three trusted HTML-fixture loaders are not shipped in the extension.
+# Exclude only the files which trigger sanitizer warnings in test setup, while
+# retaining CodeQL analysis for production code and every other test.
+paths-ignore:
+  - 'tests/dashboard-consent-gate.test.ts'
+  - 'tests/dashboard.e2e.test.ts'
+  - 'tests/popup.test.ts'

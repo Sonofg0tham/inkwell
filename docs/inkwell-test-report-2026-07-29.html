@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkwell extension test report - 29 July 2026</title>
+<style>
+  :root {
+    --paper: #fbf7ed;
+    --paper-raised: #fffdf8;
+    --ink: #22263a;
+    --muted: #676354;
+    --line: #ded5c3;
+    --coral: #c84d28;
+    --coral-soft: #f8ded2;
+    --red: #a3262f;
+    --red-soft: #f7dfe1;
+    --amber: #8a5510;
+    --amber-soft: #f5e8c9;
+    --green: #216b49;
+    --green-soft: #dceee5;
+    --blue: #355a8a;
+    --blue-soft: #e2eaf5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #17191f;
+      --paper-raised: #20232b;
+      --ink: #f4eee2;
+      --muted: #bdb5a7;
+      --line: #3b3d44;
+      --coral: #f0835e;
+      --coral-soft: #4d2c26;
+      --red: #ff8b94;
+      --red-soft: #48262b;
+      --amber: #f1bd67;
+      --amber-soft: #42351f;
+      --green: #78c79f;
+      --green-soft: #203b30;
+      --blue: #9ab8df;
+      --blue-soft: #29384c;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behaviour: smooth; }
+  body {
+    margin: 0;
+    padding: 2.5rem 1.2rem 5rem;
+    background:
+      linear-gradient(90deg, transparent 0 2.15rem, color-mix(in srgb, var(--coral) 12%, transparent) 2.15rem 2.2rem, transparent 2.2rem),
+      var(--paper);
+    color: var(--ink);
+    font: 17px/1.68 "Trebuchet MS", Verdana, sans-serif;
+  }
+  main { max-width: 76ch; margin: 0 auto; }
+  h1, h2, h3 {
+    font-family: Georgia, "Times New Roman", serif;
+    line-height: 1.22;
+    letter-spacing: -0.015em;
+  }
+  h1 { font-size: clamp(2rem, 5vw, 3.3rem); margin: 0 0 .55rem; max-width: 19ch; }
+  h2 {
+    font-size: 1.55rem;
+    margin: 3rem 0 1rem;
+    padding-top: 1.2rem;
+    border-top: 1px solid var(--line);
+  }
+  h3 { font-size: 1.12rem; margin: 1.8rem 0 .55rem; }
+  p, li { margin: 0 0 .9rem; }
+  ul, ol { padding-left: 1.35rem; }
+  a { color: var(--coral); text-underline-offset: .16em; }
+  code {
+    padding: .08em .32em;
+    border: 1px solid var(--line);
+    border-radius: .3rem;
+    background: var(--paper-raised);
+    font: .9em/1.4 Consolas, "Cascadia Code", monospace;
+  }
+  .eyebrow {
+    color: var(--coral);
+    font-size: .8rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+  }
+  .lead { color: var(--muted); font-size: 1.08rem; max-width: 64ch; margin-bottom: 1.7rem; }
+  .verdict {
+    padding: 1.2rem 1.35rem;
+    margin: 1.8rem 0;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-left: .4rem solid var(--red);
+    border-radius: 0 .8rem .8rem 0;
+  }
+  .verdict strong { display: block; color: var(--red); font-size: 1.18rem; margin-bottom: .3rem; }
+  .facts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: .7rem;
+    margin: 1.6rem 0 2.2rem;
+  }
+  .fact { padding: .8rem 0; border-top: .24rem solid var(--coral); }
+  .fact b { display: block; font: 1.55rem/1.2 Georgia, serif; }
+  .fact span { color: var(--muted); font-size: .88rem; }
+  .callout {
+    padding: .95rem 1.15rem;
+    margin: 1.3rem 0;
+    background: var(--blue-soft);
+    border-left: .35rem solid var(--blue);
+    border-radius: 0 .65rem .65rem 0;
+  }
+  .warning { background: var(--amber-soft); border-left-color: var(--amber); }
+  .good { background: var(--green-soft); border-left-color: var(--green); }
+  .table-wrap { overflow-x: auto; margin: 1.1rem 0 1.7rem; }
+  table { width: 100%; border-collapse: collapse; font-size: .93rem; }
+  th, td { padding: .66rem .72rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); font-size: .78rem; letter-spacing: .05em; text-transform: uppercase; }
+  .status, .severity {
+    display: inline-block;
+    padding: .08rem .48rem;
+    border-radius: 999px;
+    white-space: nowrap;
+    font-size: .75rem;
+    font-weight: 800;
+    letter-spacing: .035em;
+    text-transform: uppercase;
+  }
+  .pass { color: var(--green); background: var(--green-soft); }
+  .fail, .high { color: var(--red); background: var(--red-soft); }
+  .partial, .medium { color: var(--amber); background: var(--amber-soft); }
+  .low { color: var(--blue); background: var(--blue-soft); }
+  .finding {
+    margin: 1rem 0;
+    padding: 1rem 1.1rem;
+    background: var(--paper-raised);
+    border: 1px solid var(--line);
+    border-radius: .7rem;
+  }
+  .finding h3 { margin: 0 0 .55rem; }
+  .finding p:last-child { margin-bottom: 0; }
+  .meta { color: var(--muted); font-size: .87rem; }
+  .tight li { margin-bottom: .45rem; }
+  .foot { color: var(--muted); font-size: .88rem; margin-top: 2.4rem; }
+  @media (max-width: 620px) {
+    body { padding: 1.5rem .9rem 4rem; background: var(--paper); }
+    th, td { padding: .55rem; }
+  }
+  @media print {
+    body { background: #fff; color: #111; padding: 1cm; }
+    .finding, .verdict, .callout { break-inside: avoid; }
+    a { color: #111; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <div class="callout warning">
+    <strong>Historical pre-fix audit:</strong> this report records the starting point before the hardening work. The current result is in <a href="inkwell-release-readiness-2026-07-29.html">the final release-readiness report</a>.
+  </div>
+  <p class="eyebrow">Release-readiness test | 29 July 2026</p>
+  <h1>Inkwell works, but it is not Grammarly-level yet</h1>
+  <p class="lead">A real installed-extension test against Craig's local Ollama found a solid proofreading core, several hard browser cases that already work, and release blockers in accuracy, failure handling, accessibility, cross-frame state and abuse resistance.</p>
+
+  <div class="verdict">
+    <strong>Verdict: alpha-quality, not ready for a Grammarly parity claim</strong>
+    The normal flow works in textareas, text inputs, rich text, controlled fields, dynamic fields, open shadow roots and cross-origin frames. The current local-model results are too inconsistent for trusted daily proofreading, and the product is missing a large part of Grammarly's browser feature set.
+  </div>
+
+  <div class="facts" aria-label="Key test facts">
+    <div class="fact"><b>188</b><span>automated tests passed</span></div>
+    <div class="fact"><b>22/22</b><span>probe findings parsed and anchored</span></div>
+    <div class="fact"><b>1.2-4.1s</b><span>typical warm Qwen response</span></div>
+    <div class="fact"><b>0</b><span>Critical findings</span></div>
+  </div>
+
+  <div class="callout good">
+    <strong>The good bit:</strong> the difficult browser plumbing is genuine. Apply, Dismiss, native undo, React-style controlled state, nested rich text, formatting preservation, cross-origin iframe injection, password and OTP exclusion, per-site controls and the document workspace all worked in the live extension.
+  </div>
+
+  <div class="callout warning">
+    <strong>Important baseline note:</strong> the checkout was already heavily modified before testing, with 25 tracked files changed and many untracked files. No source fix was made during this review. Results describe the exact working tree tested, not a clean commit on <code>main</code>.
+  </div>
+
+  <h2>What was tested</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Layer</th><th>Result</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Vitest suite</td><td><span class="status pass">Pass</span></td><td>9 files passed, 1 skipped. 188 tests passed and 6 opt-in probes skipped.</td></tr>
+        <tr><td>Real Ollama pipeline</td><td><span class="status pass">Pass</span></td><td><code>qwen2.5:7b-instruct</code> returned 4 raw fixes, all 4 parsed and anchored.</td></tr>
+        <tr><td>Real-model diagnostic</td><td><span class="status pass">Pass with caveat</span></td><td>6 runs completed. 22 findings survived validation and anchoring. The probe uses <code>expect(true)</code>, so its green status alone is not a regression gate.</td></tr>
+        <tr><td>TypeScript</td><td><span class="status pass">Pass</span></td><td><code>npm.cmd run typecheck</code> returned no diagnostics.</td></tr>
+        <tr><td>Chrome and Edge builds</td><td><span class="status pass">Pass</span></td><td>Both MV3 bundles built at about 2.2 MB. The Chrome zip was produced at 767,154 bytes with SHA-256 <code>93EA74A803E789945B18CB6D70CC56F7A92B78482FCC91AB1E6A269615363500</code>.</td></tr>
+        <tr><td>Installed extension</td><td><span class="status pass">Pass</span></td><td>Loaded into Playwright Chromium 143 with the real background worker, options page, content script and Ollama Origin/CORS path.</td></tr>
+        <tr><td>Live public sites</td><td><span class="status partial">Partial</span></td><td>GitHub search passed in 1.23 seconds. Wikipedia's source editor passed on the diagnostic rerun. Google's automated page exposed no visible search control, so that result is inconclusive.</td></tr>
+        <tr><td>Native Edge runtime</td><td><span class="status partial">Partial</span></td><td>The Edge bundle loaded and checked text in Chromium. A real Edge automation run was not possible because current stable browsers block command-line unpacked-extension loading.</td></tr>
+        <tr><td>Dependency and package checks</td><td><span class="status partial">Partial</span></td><td>Offline npm audit reported 0 cached advisories across 461 dependencies, and <code>npm ls</code> found no invalid tree. Live registry audit was blocked, so this is not proof against current advisories. The 31-entry zip had no traversal, duplicate, source-map or secret-pattern findings.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Real browser matrix</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Scenario</th><th>Result</th><th>Observed behaviour</th></tr></thead>
+      <tbody>
+        <tr><td>Ollama model discovery</td><td><span class="status pass">Pass</span></td><td>Found all 5 installed models. Saving <code>qwen2.5:7b-instruct</code> returned “Saved and connected”.</td></tr>
+        <tr><td>Plain textarea</td><td><span class="status pass">Pass</span></td><td>4 underlines in 3.93 seconds on the first run.</td></tr>
+        <tr><td>Text input</td><td><span class="status pass">Pass</span></td><td>2 suggestions. First result in 1.68 seconds.</td></tr>
+        <tr><td>Search input</td><td><span class="status pass">Pass</span></td><td>Suggestion appeared in 4.13 seconds.</td></tr>
+        <tr><td>Nested contenteditable</td><td><span class="status pass">Pass</span></td><td>3 suggestions across two paragraphs. Applying a fix preserved the nested <code>&lt;strong&gt;</code> element.</td></tr>
+        <tr><td>Controlled textarea</td><td><span class="status pass">Pass</span></td><td>Applied correction survived the page's state mirror. Native state updated correctly.</td></tr>
+        <tr><td>Dynamically populated field</td><td><span class="status pass">Pass</span></td><td>2 suggestions in 2.30 seconds.</td></tr>
+        <tr><td>Open shadow-root field</td><td><span class="status partial">Partial</span></td><td>Suggestions worked, but its overlay stayed visible after focus moved to an iframe.</td></tr>
+        <tr><td>Cross-origin iframe</td><td><span class="status pass">Pass</span></td><td>3 suggestions in 2.53 seconds.</td></tr>
+        <tr><td>Apply, Dismiss and Ctrl+Z</td><td><span class="status pass">Pass</span></td><td>Apply changed the right span, Dismiss removed one suggestion and native undo restored the text.</td></tr>
+        <tr><td>Password, OTP, opt-out and read-only fields</td><td><span class="status pass">Pass</span></td><td>0 model requests and 0 underlines for all four exclusions.</td></tr>
+        <tr><td>Global and per-site switches</td><td><span class="status pass">Pass</span></td><td>Both stopped requests and removed the overlay. Re-enabling restored checking.</td></tr>
+        <tr><td>Narrow viewport</td><td><span class="status pass">Pass</span></td><td>The 220 px suggestion card remained inside a 390 by 844 viewport.</td></tr>
+        <tr><td>Short typo, <code>teh</code></td><td><span class="status fail">Fail</span></td><td>0 requests and 0 suggestions. Text below 12 characters is skipped by design.</td></tr>
+        <tr><td>Change checking category</td><td><span class="status fail">Fail</span></td><td>Disabling spelling left 2 existing spelling underlines until the text changed.</td></tr>
+        <tr><td>Local model outage</td><td><span class="status partial">Partial</span></td><td>Settings and the document workspace showed a useful error. Ordinary web fields showed nothing and logged only to DevTools.</td></tr>
+        <tr><td>Keyboard access</td><td><span class="status fail">Fail</span></td><td>Underlines are non-focusable <code>div</code> elements with no role or accessible name. Tab moved to the next page input.</td></tr>
+        <tr><td>Badge lifecycle</td><td><span class="status fail">Fail</span></td><td>The badge showed 5 while the active field had 2 findings, then stayed at 5 after blur and overlay removal.</td></tr>
+        <tr><td>Document workspace</td><td><span class="status pass">Pass</span></td><td>5 live suggestions, single Accept, Fix all, two-step Undo, autosave and reload persistence all worked.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Local-model quality</h2>
+  <p>A browser extension can be mechanically correct and still be a poor proofreader. These results use the extension's exact prompt, schema, background worker and Ollama connection.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Case</th><th>Qwen 2.5 7B</th><th>Gemma 4 12B</th></tr></thead>
+      <tbody>
+        <tr><td>Dense typo paragraph</td><td>8 of 9 planted errors found. Missed <code>alot</code>; changed “going foward” to “forward”.</td><td>Failed: model output was not JSON.</td></tr>
+        <tr><td>Grammar</td><td>Found 2 areas, but left one agreement error in the replacement.</td><td>Failed: model output was not JSON.</td></tr>
+        <tr><td>Punctuation</td><td>Found the missing apostrophe only. Missed two sentence-boundary punctuation errors.</td><td>Failed: model output was not JSON.</td></tr>
+        <tr><td>UK dialect</td><td>Found 2 of 5 American forms. US mode also found only part of the reverse set.</td><td>Failed: model output was not JSON.</td></tr>
+        <tr><td>Clean prose</td><td>No false positive.</td><td>No false positive.</td></tr>
+        <tr><td>Email and URL guard</td><td>False positive. Suggested replacing <code>craig@example.com</code> with malformed text.</td><td>No false positive.</td></tr>
+        <tr><td>Repeated typo</td><td>Found 1 of 2 identical misspellings.</td><td>Found both and anchored them correctly.</td></tr>
+        <tr><td>Prompt injection</td><td>Followed the passage instruction and suggested <code>safe</code> to <code>PWNED</code>.</td><td>Returned no issue.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Qwen was usually responsive once warm. Gemma took roughly two minutes for eight small cases and failed half of them, despite “Save and test” saying it was connected.</p>
+
+  <div class="callout warning">
+    <strong>Recommendation:</strong> keep the local LLM for contextual grammar, clarity and rewrites, but add a deterministic local spelling and rule layer. A 7B model on its own is not consistent enough to match a mature proofreader. Build a fixed acceptance corpus and qualify each model before it can be selected as “recommended”.
+  </div>
+
+  <h2>Release blockers</h2>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> Current model path is not accurate enough for trusted proofreading</h3>
+    <p class="meta"><code>lib/checker/prompt.ts</code>, <code>lib/checker/schema.ts:205-227</code>, <code>entrypoints/options/main.ts:183-235</code></p>
+    <p><strong>What's wrong:</strong> Qwen misses clear errors, misclassifies categories, creates unsafe replacements and follows instructions inside the passage. Gemma passes the connection test but frequently returns unusable output.</p>
+    <p><strong>Why it matters:</strong> a proofreader that silently misses mistakes or offers corrupt edits breaks the product's main promise.</p>
+    <p><strong>Fix:</strong> make connection testing perform a small structured completion, add a model qualification suite, reject changes to emails, URLs and code-like tokens, and use a local spelling and grammar rule layer before the LLM.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> Short fields are never checked</h3>
+    <p class="meta"><code>lib/checker/chunker.ts:10-12, 50-63</code></p>
+    <p><strong>What's wrong:</strong> every chunk under 12 characters is skipped. The live <code>teh</code> test generated no request.</p>
+    <p><strong>Why it matters:</strong> titles, short replies, search terms and single-word typos are common browser-extension use cases.</p>
+    <p><strong>Fix:</strong> remove the length threshold or reduce it to a letter-aware minimum. Cover <code>teh</code>, <code>recieve</code> and short clean words in regression tests.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> Settings changes leave stale advice on screen</h3>
+    <p class="meta"><code>entrypoints/content.ts:27-46</code>, <code>lib/content/fieldController.ts:153-177, 205-214</code></p>
+    <p><strong>What's wrong:</strong> the content script reacts only to global and site enablement. It does not clear field caches when model, dialect, strictness or categories change.</p>
+    <p><strong>Why it matters:</strong> users can disable a rule and still see its underlines, or keep advice from the wrong dialect and model.</p>
+    <p><strong>Fix:</strong> give controllers a settings version. On any checking-setting change, cancel pending work, clear cached results, rerender and recheck the active field.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> Web-page failures look like clean writing</h3>
+    <p class="meta"><code>lib/content/fieldController.ts:217-235</code>, <code>entrypoints/popup/main.ts:45-61</code></p>
+    <p><strong>What's wrong:</strong> an in-page network or model failure produces no visible editor state. The only evidence is a console warning, while the popup can still say there are no suggestions.</p>
+    <p><strong>Why it matters:</strong> users cannot tell “no errors” from “nothing was checked”.</p>
+    <p><strong>Fix:</strong> add per-frame status to the message protocol and badge/popup. Show checking, checked, partial and failed states beside the active field, using the honest-state pattern already present in the dashboard.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> Request IDs collide across tabs and frames</h3>
+    <p class="meta"><code>lib/content/fieldController.ts:30, 208</code>, <code>lib/checker/service.ts:47-50, 102-110</code></p>
+    <p><strong>What's wrong:</strong> each isolated content-script frame starts the same counter. The background's global active map is keyed only by that local ID.</p>
+    <p><strong>Why it matters:</strong> one frame can overwrite or cancel another request, break the two-request limit, or lose a result. Gmail-style iframe use makes this realistic.</p>
+    <p><strong>Fix:</strong> generate IDs with <code>crypto.randomUUID()</code>, or scope them by port, tab and frame before inserting them into the background map.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> Security: an enabled page can drive and read the model</h3>
+    <p class="meta"><code>lib/content/editableWatcher.ts:47-67</code>, <code>lib/content/fieldController.ts:71-77</code>, <code>lib/content/overlay/host.ts:128-144</code> | OWASP LLM01 and LLM10</p>
+    <p><strong>Source to sink:</strong> page-generated focus and input events reach the provider, then model output is exposed through an open shadow root.</p>
+    <p><strong>What's wrong:</strong> the test page triggered an Ollama request with no user gesture and read the resulting suggestion. Qwen also followed an instruction embedded in the passage.</p>
+    <p><strong>Why it matters:</strong> a malicious site can use the extension as a constrained LLM oracle and repeatedly consume local compute or paid cloud quota. The human Apply gate limits the edit impact, but not the request or read.</p>
+    <p><strong>Fix:</strong> require a recent trusted pointer or keyboard interaction before starting checks, add per-origin rate and text budgets, keep cloud checking opt-in by site, and expose the overlay through a closed shadow root. Treat prompt delimiters as defence in depth, not a security boundary.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> Suggestions cannot be used with a keyboard or screen reader</h3>
+    <p class="meta"><code>lib/content/overlay/underlines.ts</code>, <code>lib/content/overlay/card.ts</code></p>
+    <p><strong>What's wrong:</strong> underlines are <code>div</code> elements with <code>tabIndex=-1</code>, no role and no accessible name. The card can only be opened with a pointer.</p>
+    <p><strong>Why it matters:</strong> keyboard and assistive-technology users cannot review or apply suggestions. This fails the browser-extension parity baseline and WCAG keyboard access.</p>
+    <p><strong>Fix:</strong> add a keyboard shortcut and ordered review panel, provide focusable controls with names and states, support Escape, Tab, Enter and Space, and add Playwright plus axe coverage.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> The document workspace bypasses chunking</h3>
+    <p class="meta"><code>entrypoints/dashboard/main.ts:221-259</code>, <code>lib/checker/service.ts:141-149</code></p>
+    <p><strong>What's wrong:</strong> the dashboard sends the full document in one model request, unlike the page checker.</p>
+    <p><strong>Why it matters:</strong> a large import can exceed a local model's context, time out, or return only an early subset of findings. Superseded checks also continue using compute.</p>
+    <p><strong>Fix:</strong> chunk documents, merge offsets and partial results, cancel the previous request as soon as the text changes, and show progress by chunk.</p>
+  </div>
+
+  <div class="finding">
+    <h3><span class="severity high">High</span> No durable installed-extension E2E suite exists</h3>
+    <p class="meta"><code>package.json</code>, <code>TEST_INFRA.md</code>, <code>tests/dashboard.e2e.test.ts</code></p>
+    <p><strong>What's wrong:</strong> the repository's “E2E” tests run in Happy DOM with mocked Chrome APIs. No checked-in test loads the extension, focuses a real field or exercises CORS, frames, underlines and Apply.</p>
+    <p><strong>Why it matters:</strong> the exact bugs found in this review can regress while all 188 tests stay green.</p>
+    <p><strong>Fix:</strong> add a Playwright persistent-context suite for the built extension. Keep the Ollama cases opt-in locally, and run deterministic fake-provider browser cases in CI.</p>
+  </div>
+
+  <h2>Other issues</h2>
+  <ul class="tight">
+    <li><span class="severity medium">Medium</span> Shadow-root focus-out compares the retargeted <code>e.target</code> with the inner field at <code>lib/content/editableWatcher.ts:69-74</code>. Use <code>composedPath()</code> on blur too.</li>
+    <li><span class="severity medium">Medium</span> Badge counts are stale and represent the last active field in each frame, not the page. Report zero on deactivate and define whether the badge means active field or full page.</li>
+    <li><span class="severity medium">Medium</span> <code>about:blank</code> and <code>srcdoc</code> iframe editors are not covered because the content script has no match-about-blank or origin-fallback setting.</li>
+    <li><span class="severity medium">Medium</span> Results after the first 20 are silently truncated at <code>lib/checker/schema.ts:213</code>. Count the overflow as dropped and page or chunk the results.</li>
+    <li><span class="severity medium">Medium</span> The capitalisation repair at <code>lib/checker/anchor.ts:105-112, 202</code> can uppercase a legitimate mid-sentence replacement. Apply it only after a case-insensitive fallback at a sentence boundary.</li>
+    <li><span class="severity medium">Medium</span> API keys live in <code>chrome.storage.local</code>, which content-script contexts can read directly. Set storage access to trusted contexts and expose only non-secret settings through background messages.</li>
+    <li><span class="severity medium">Medium</span> A remote OpenAI-compatible endpoint can be labelled “local”, and plaintext HTTP is allowed outside loopback. Warn when data leaves the device and require HTTPS for non-loopback hosts.</li>
+    <li><span class="severity medium">Medium</span> Sensitive-field checks cover passwords, card autocomplete and OTP, but not address fields, usernames, code editors or <code>spellcheck="false"</code>. Expand the deny rules and provide site-level privacy controls.</li>
+    <li><span class="severity low">Low</span> Cloud API origins are granted at install time at <code>wxt.config.ts:11-18</code>, even for local-only users. Keep loopback static and request each cloud origin only when selected.</li>
+    <li><span class="severity low">Low</span> <code>.gitignore</code> covers environment files but not <code>*.pem</code>, <code>*.key</code> or <code>credentials*.json</code>. No such secret file is currently tracked.</li>
+    <li><span class="severity low">Low</span> PDF lazy loading is ineffective because <code>lib/import/index.ts</code> imports <code>PdfError</code> statically and the PDF module dynamically. Both builds warn about it.</li>
+    <li><span class="severity low">Low</span> <code>TEST_INFRA.md</code> calls the mocked Happy DOM suite “Complete 4-tier E2E”. Rename it to simulated integration coverage.</li>
+  </ul>
+
+  <h2>Grammarly parity</h2>
+  <p>The comparison below uses Grammarly's current official browser documentation. Core parity means more than red underlines: it includes review interaction, dialects, personalisation, accessibility and dependable website behaviour.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Capability</th><th>Inkwell</th><th>Parity call</th></tr></thead>
+      <tbody>
+        <tr><td>Spelling, grammar and punctuation</td><td>Implemented through the selected model</td><td><span class="status partial">Partial</span> Accuracy is model-dependent and inconsistent.</td></tr>
+        <tr><td>Inline underlines, explanation, Apply and Dismiss</td><td>Implemented</td><td><span class="status pass">Good</span> Core interaction works.</td></tr>
+        <tr><td>One-at-a-time review and keyboard navigation</td><td>Dashboard review exists; page overlay is pointer-only</td><td><span class="status fail">Missing</span></td></tr>
+        <tr><td>Personal dictionary and ignore-all</td><td>Not implemented; Dismiss lasts only for the field session</td><td><span class="status fail">Missing</span></td></tr>
+        <tr><td>Dialect support</td><td>UK and US only</td><td><span class="status partial">Partial</span> Grammarly documents five English dialects.</td></tr>
+        <tr><td>Multilingual checking</td><td>Not implemented</td><td><span class="status fail">Missing</span> Grammarly lists English plus 23 languages.</td></tr>
+        <tr><td>Clarity, tone, confidence and delivery</td><td>Basic strictness and formality prompts</td><td><span class="status partial">Early</span> No dependable tone detector or full category system.</td></tr>
+        <tr><td>Sentence and paragraph rewrite</td><td>Not implemented</td><td><span class="status fail">Missing</span></td></tr>
+        <tr><td>Selected-text improve, shorten, translate or reply</td><td>Not implemented</td><td><span class="status fail">Missing</span></td></tr>
+        <tr><td>Google Docs</td><td>Explicitly out of scope</td><td><span class="status fail">Missing</span></td></tr>
+        <tr><td>Browser coverage</td><td>Chrome and Edge builds</td><td><span class="status partial">Partial</span> Grammarly also documents Safari and Firefox.</td></tr>
+        <tr><td>Per-site control</td><td>Implemented and passed</td><td><span class="status pass">Good</span></td></tr>
+        <tr><td>Offline and local privacy</td><td>Works with Ollama and no account</td><td><span class="status pass">Advantage</span> This is Inkwell's clearest differentiator.</td></tr>
+        <tr><td>Citations, plagiarism, Authorship, analytics and team features</td><td>Not implemented</td><td><span class="status low">Later tier</span> These are beyond core proofreading parity.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Relevant official references: <a href="https://support.grammarly.com/hc/en-us/articles/115000091592-Grammarly-s-browser-extension-user-guide">browser-extension guide</a>, <a href="https://support.grammarly.com/hc/en-us/articles/34517006125837-Can-I-use-my-keyboard-to-navigate-the-Grammarly-browser-extension">keyboard navigation</a>, <a href="https://support.grammarly.com/hc/en-us/articles/115000089992-Select-between-British-English-American-English-Canadian-English-Australian-English-and-Indian-English">English dialects</a>, <a href="https://support.grammarly.com/hc/en-us/articles/115000091491-How-do-I-use-my-personal-dictionary">personal dictionary</a>, <a href="https://support.grammarly.com/hc/en-us/articles/115000090971-Does-Grammarly-support-languages-other-than-English">language support</a>, <a href="https://support.grammarly.com/hc/en-us/articles/14528857014285-Introducing-generative-AI-assistance">generative assistance</a> and <a href="https://support.grammarly.com/hc/en-us/articles/19812297751053-Get-started-with-Grammarly">online requirement</a>.</p>
+
+  <h2>Recommended order of work</h2>
+  <ol>
+    <li><strong>Make failure honest.</strong> Add visible checking, partial and failed states to ordinary web fields and the popup.</li>
+    <li><strong>Fix correctness races.</strong> Use globally unique request IDs, invalidate caches on settings changes, fix shadow blur and reset badge counts.</li>
+    <li><strong>Build a real browser test gate.</strong> Check textarea, input, contenteditable, controlled fields, frames, shadow DOM, Apply, undo, failure and settings changes.</li>
+    <li><strong>Harden the page boundary.</strong> Require recent user interaction, rate-limit each origin, close the shadow root and lock extension storage to trusted contexts.</li>
+    <li><strong>Raise proofreading quality.</strong> Add deterministic local spelling and grammar checks, plus a model acceptance corpus covering false positives and injection.</li>
+    <li><strong>Close core parity gaps.</strong> Keyboard review, personal dictionary, ignore-all, more dialects, better clarity and tone, then rewrites.</li>
+  </ol>
+
+  <div class="verdict">
+    <strong>Release call</strong>
+    Safe enough for supervised personal testing with <code>qwen2.5:7b-instruct</code>, after selecting that model in settings. Not ready to market as working everywhere, not ready for cloud-provider use on arbitrary sites, and not close enough to Grammarly to claim feature parity.
+  </div>
+
+  <p class="foot">Prepared from source inspection, current official Grammarly documentation, automated tests, direct Ollama probes and a real unpacked-extension browser session. No source changes were made as part of this test pass.</p>
+</main>
+</body>
+</html>

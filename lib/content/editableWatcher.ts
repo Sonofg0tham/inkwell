@@ -1,46 +1,36 @@
 // Focus-driven discovery of editable surfaces. The content script stays inert
 // until the user actually focuses something checkable.
 import { FieldController, type FieldEnv } from './fieldController';
+import { isInkwellOverlayTarget, resolveEditable } from './editablePolicy';
 import { destroyOverlayHost } from './overlay/host';
-import type { FieldTarget } from './types';
 
-const SKIP_AUTOCOMPLETE = /^(cc-|one-time-code)/;
-
-function resolveEditable(raw: EventTarget | null): FieldTarget | null {
-  if (!(raw instanceof Element)) return null;
-  if (raw.closest('[data-inkwell-disable]')) return null;
-
-  if (raw instanceof HTMLTextAreaElement) {
-    if (raw.readOnly || raw.disabled) return null;
-    if (SKIP_AUTOCOMPLETE.test(raw.autocomplete ?? '')) return null;
-    return { kind: 'textarea', el: raw };
-  }
-  if (raw instanceof HTMLInputElement) {
-    // Only plain text-ish inputs — never password, email, number, etc.
-    if (raw.type !== 'text' && raw.type !== 'search') return null;
-    if (raw.readOnly || raw.disabled) return null;
-    if (SKIP_AUTOCOMPLETE.test(raw.autocomplete ?? '')) return null;
-    return { kind: 'input', el: raw };
-  }
-  if (raw instanceof HTMLElement && raw.isContentEditable) {
-    // Climb to the editing host (the outermost editable element).
-    let host: HTMLElement = raw;
-    while (host.parentElement?.isContentEditable) host = host.parentElement;
-    if (host.closest('[data-inkwell-disable]')) return null;
-    return { kind: 'contenteditable', el: host };
-  }
-  return null;
+export interface WatcherHandle {
+  stop(): void;
+  settingsChanged(): void;
 }
 
-export function startWatcher(env: FieldEnv): () => void {
+/** The genuinely focused element, following open shadow roots down. */
+function deepActiveElement(): Element | null {
+  let el: Element | null = document.activeElement;
+  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+  return el;
+}
+
+export function startWatcher(env: FieldEnv): WatcherHandle {
   const controllers = new WeakMap<Element, FieldController>();
   let activeController: FieldController | null = null;
   let activeElement: Element | null = null;
 
+  const deactivateActive = (): void => {
+    activeController?.deactivate();
+    activeController = null;
+    activeElement = null;
+  };
+
   const attach = (rawTarget: EventTarget | null): void => {
     const target = resolveEditable(rawTarget);
     if (!target || activeElement === target.el) return;
-    activeController?.deactivate();
+    deactivateActive();
     let controller = controllers.get(target.el);
     if (!controller) {
       controller = new FieldController(target, env);
@@ -51,26 +41,47 @@ export function startWatcher(env: FieldEnv): () => void {
     controller.activate();
   };
 
-  const onFocusIn = (e: FocusEvent): void => attach(e.target);
+  // Events crossing a shadow boundary are retargeted to the host, so
+  // composedPath()[0] identifies the field that was actually focused.
+  const onFocusIn = (event: FocusEvent): void => {
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    attach(path[0] ?? event.target);
+  };
 
-  const onFocusOut = (e: FocusEvent): void => {
-    if (e.target !== activeElement) return;
-    activeController?.deactivate();
-    activeController = null;
-    activeElement = null;
+  const onFocusOut = (event: FocusEvent): void => {
+    if (!activeController || !activeElement) return;
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    const origin = path[0] ?? event.target;
+    const originField = resolveEditable(origin);
+    const leftActiveField =
+      origin === activeElement ||
+      (origin instanceof Node && activeElement.contains(origin)) ||
+      originField?.el === activeElement;
+    const leftOverlay =
+      isInkwellOverlayTarget(origin) || isInkwellOverlayTarget(event.target);
+    if (!leftActiveField && !leftOverlay) return;
+
+    // The card and its buttons live in Inkwell's shadow tree. Moving focus
+    // there must not tear down the controller before keyboard actions run.
+    if (isInkwellOverlayTarget(event.relatedTarget)) return;
+    const nextField = resolveEditable(event.relatedTarget);
+    if (nextField?.el === activeElement) return;
+    deactivateActive();
   };
 
   document.addEventListener('focusin', onFocusIn, true);
   document.addEventListener('focusout', onFocusOut, true);
-  // A field may already be focused when the watcher starts.
-  if (document.activeElement) attach(document.activeElement);
+  // A field may already be focused when the watcher starts. document.activeElement
+  // is retargeted too, so descend through any open shadow roots to the real one.
+  if (document.activeElement) attach(deepActiveElement());
 
-  return () => {
-    document.removeEventListener('focusin', onFocusIn, true);
-    document.removeEventListener('focusout', onFocusOut, true);
-    activeController?.deactivate();
-    activeController = null;
-    activeElement = null;
-    destroyOverlayHost();
+  return {
+    settingsChanged: () => activeController?.settingsChanged(),
+    stop: () => {
+      document.removeEventListener('focusin', onFocusIn, true);
+      document.removeEventListener('focusout', onFocusOut, true);
+      deactivateActive();
+      destroyOverlayHost();
+    },
   };
 }

@@ -2,8 +2,16 @@ node_modules/
 .output/
 .wxt/
 .remember/
+.agents/
+.playwright-mcp/
+playwright-report/
+test-results/
+blob-report/
 *.log
 stats.html
 stats-*.json
 .env
 .env.*
+*.pem
+*.key
+credentials*.json
