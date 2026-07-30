@@ -20,6 +20,7 @@ vi.mock('../lib/settings/store', () => ({
 }));
 
 import { CheckService } from '../lib/checker/service';
+import { findLocalSpellingIssues } from '../lib/checker/localSpelling';
 import { buildSystemPrompt } from '../lib/checker/prompt';
 import type { IssueDto, PortResponse } from '../lib/messaging/protocol';
 import { ProviderError } from '../lib/providers/types';
@@ -129,6 +130,13 @@ describe('deterministic local spelling', () => {
     expect(issues).toEqual([
       expect.objectContaining({ original: 'definately', replacement: 'definitely' }),
     ]);
+  });
+
+  it('handles long underscored identifiers without pathological regular-expression backtracking', () => {
+    const identifier = `prefix_${'$__'.repeat(10_000)}suffix`;
+
+    expect(findLocalSpellingIssues(identifier, DEFAULT_SETTINGS)).toEqual([]);
+    expect(findLocalSpellingIssues('recieve_value', DEFAULT_SETTINGS)).toEqual([]);
   });
 
   it('honours spelling category and personal dictionary settings', async () => {

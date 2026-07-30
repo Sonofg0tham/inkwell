@@ -5,6 +5,8 @@ import { readZipEntry, ZipError } from './zip';
 
 export class DocxError extends Error {}
 
+const UNSUPPORTED_XML_DECLARATION = /<!\s*(?:DOCTYPE|ENTITY)\b/iu;
+
 const SKIP_ELEMENTS = new Set([
   'instrText', // field codes, e.g. page numbers
   'delText', // tracked deletions — not part of the current text
@@ -40,6 +42,13 @@ function paragraphText(paragraph: Element): string {
 
 /** Converts WordprocessingML to plain text, one line per paragraph. */
 export function documentXmlToText(xml: string): string {
+  if (UNSUPPORTED_XML_DECLARATION.test(xml)) {
+    throw new DocxError('The document contains unsupported XML declarations.');
+  }
+
+  // This creates a detached XML document. Parsed nodes are never attached to
+  // an HTML document, and this module only reads textContent from w:t nodes.
+  // codeql[js/xss-through-dom]
   const doc = new DOMParser().parseFromString(xml, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length > 0) {
     throw new DocxError('The document’s contents could not be read.');

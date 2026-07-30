@@ -114,9 +114,10 @@ const PROTECTED_PATTERNS = [
   /@[\p{L}\p{N}_]+/gu,
   /`[^`\r\n]*`/g,
   /\b[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)+(?:\([^\r\n)]*\))?/g,
-  /\b[A-Za-z_$][\w$]*(?:_[A-Za-z0-9_$]+)+\b/g,
   /(?:[A-Za-z]:\\|\.\.?\/)[^\s<>"']+/g,
 ] as const;
+
+const IDENTIFIER_PATTERN = /\b[A-Za-z_][A-Za-z0-9_$]*\b/g;
 
 function getSpeller(dialect: Dialect): SpellChecker {
   const cached = SPELLERS.get(dialect);
@@ -127,17 +128,27 @@ function getSpeller(dialect: Dialect): SpellChecker {
   return checker;
 }
 
+function collectPatternRanges(
+  text: string,
+  pattern: RegExp,
+  ranges: TextRange[],
+  accept: (value: string) => boolean = () => true,
+): void {
+  pattern.lastIndex = 0;
+  for (;;) {
+    const match = pattern.exec(text);
+    if (!match) break;
+    if (accept(match[0])) {
+      ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+    if (match[0].length === 0) pattern.lastIndex++;
+  }
+}
+
 function protectedRanges(text: string): TextRange[] {
   const ranges: TextRange[] = [];
-  for (const pattern of PROTECTED_PATTERNS) {
-    pattern.lastIndex = 0;
-    for (;;) {
-      const match = pattern.exec(text);
-      if (!match) break;
-      ranges.push({ start: match.index, end: match.index + match[0].length });
-      if (match[0].length === 0) pattern.lastIndex++;
-    }
-  }
+  for (const pattern of PROTECTED_PATTERNS) collectPatternRanges(text, pattern, ranges);
+  collectPatternRanges(text, IDENTIFIER_PATTERN, ranges, (value) => value.includes('_'));
   return ranges;
 }
 

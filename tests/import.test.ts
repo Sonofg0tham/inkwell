@@ -146,6 +146,31 @@ describe('docx text extraction', () => {
     expect(text).toContain('Kept.');
   });
 
+  it('treats encoded markup as plain text without attaching imported nodes to the page', () => {
+    const sentinel = document.createElement('p');
+    sentinel.id = 'import-sentinel';
+    sentinel.textContent = 'unchanged';
+    document.body.replaceChildren(sentinel);
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body><w:p><w:r><w:t>&lt;img src=&quot;x&quot; onerror=&quot;alert(1)&quot;&gt;</w:t></w:r></w:p></w:body>
+      </w:document>`;
+
+    expect(documentXmlToText(xml)).toBe('<img src="x" onerror="alert(1)">');
+    expect(document.querySelector('img')).toBeNull();
+    expect(document.getElementById('import-sentinel')?.textContent).toBe('unchanged');
+  });
+
+  it('rejects DTD and entity declarations before parsing document XML', () => {
+    const xml = `<?xml version="1.0"?>
+      <!DOCTYPE w:document [<!ENTITY payload "expanded">]>
+      <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+        <w:body><w:p><w:r><w:t>&payload;</w:t></w:r></w:p></w:body>
+      </w:document>`;
+
+    expect(() => documentXmlToText(xml)).toThrow(/unsupported XML declarations/i);
+  });
+
   it('extracts from a whole docx archive', async () => {
     const zip = makeZip([
       { name: '[Content_Types].xml', content: '<types/>' },
