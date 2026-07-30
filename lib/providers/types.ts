@@ -84,5 +84,13 @@ export async function ensureOk(
   if (res.status === 429) {
     throw new ProviderError('rate_limit', 'Rate limited (HTTP 429). Wait a moment and try again.');
   }
+  if (res.status >= 500 && res.status < 600) {
+    // The provider is up but struggling — common on free tiers at peak times.
+    // Nothing for the user to fix, so say so and let the checker retry.
+    throw new ProviderError(
+      'unavailable',
+      `The model provider is busy or overloaded (HTTP ${res.status}). Inkwell will try again shortly.`,
+    );
+  }
   throw new ProviderError('network', `The server returned HTTP ${res.status}.`);
 }

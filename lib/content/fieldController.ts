@@ -2,12 +2,13 @@
 // rendering, and the apply/dismiss lifecycle.
 import { chunkText, type Chunk } from '../checker/chunker';
 import { fnvHash } from '../checker/hash';
-import type { IssueDto, PortResponse } from '../messaging/protocol';
+import type { FrameCheckState, IssueDto, PortResponse } from '../messaging/protocol';
 import type { Settings } from '../settings/schema';
 import { applyFix } from './applyFix';
 import { getOverlayHost } from './overlay/host';
 import { measureTextControl } from './overlay/mirror';
 import { SuggestionCard } from './overlay/card';
+import { OverlayStatus } from './overlay/status';
 import { UnderlineLayer, type SegmentSpec } from './overlay/underlines';
 import type { PortClient } from './portClient';
 import { buildTextIndex, offsetFromPoint, rangeFromOffsets, type TextIndex } from './textIndex';
@@ -17,6 +18,8 @@ export interface FieldEnv {
   getSettings(): Settings;
   port: PortClient;
   reportCount(count: number): void;
+  reportStatus?(state: Omit<FrameCheckState, 'sequence'>): void;
+  addToDictionary?(word: string): void;
 }
 
 const DEBOUNCE_MS = 800;
@@ -27,17 +30,20 @@ const HOVER_HIDE_MS = 300;
 const MAX_HASH_ENTRIES = 200;
 const SCROLLING_OVERFLOWS = new Set(['auto', 'scroll', 'hidden', 'overlay', 'clip']);
 
-let requestCounter = 0;
-
 export class FieldController {
   private issuesByHash = new Map<string, IssueDto[]>();
   private dismissed = new Set<string>();
+  private ignoredWords = new Set<string>();
   private chunks: Chunk[] = [];
   private pending = new Map<string, string>(); // requestId -> chunkHash
   private currentIssues: DocIssue[] = [];
   private textIndexCache: TextIndex | null = null;
   private lastTextLength = 0;
   private lastReportedCount = -1;
+  private userEdited = false;
+  private droppedCount = 0;
+  private incompleteHint: string | null = null;
+  private hasCompletedCheck = false;
 
   private active = false;
   private composing = false;
@@ -51,6 +57,7 @@ export class FieldController {
 
   private underlines: UnderlineLayer;
   private card: SuggestionCard;
+  private status: OverlayStatus;
 
   constructor(
     private target: FieldTarget,
@@ -65,26 +72,46 @@ export class FieldController {
     this.card = new SuggestionCard(host, {
       onApply: (issue) => this.apply(issue),
       onDismiss: (issue) => this.dismiss(issue),
+      onAddToDictionary: this.env.addToDictionary
+        ? (word) => this.env.addToDictionary?.(word)
+        : undefined,
+      onIgnoreAll: (word) => this.ignoreAll(word),
     });
+    this.status = new OverlayStatus(host);
   }
 
-  private onInput = (): void => {
+  private onInput = (event: Event): void => {
+    if (!event.isTrusted) return;
+    this.userEdited = true;
+    this.handleTextChange();
+  };
+
+  private handleTextChange(): void {
     if (this.composing) return;
     this.card.hide();
+    this.status.clear();
+    this.hasCompletedCheck = false;
+    this.droppedCount = 0;
+    this.incompleteHint = null;
     this.rechunk();
     this.scheduleRender();
     this.scheduleCheck();
-  };
+    this.env.reportStatus?.({ phase: 'checking', count: 0 });
+  }
 
-  private onCompositionStart = (): void => {
+  private onCompositionStart = (event: Event): void => {
+    if (!event.isTrusted) return;
     this.composing = true;
     this.underlines.clear();
     this.card.hide();
+    this.status.clear();
   };
 
-  private onCompositionEnd = (): void => {
+  private onCompositionEnd = (event: Event): void => {
+    if (!event.isTrusted) return;
     this.composing = false;
-    this.onInput();
+    this.userEdited = true;
+    this.handleTextChange();
   };
 
   private onScrollOrResize = (): void => {
@@ -111,7 +138,7 @@ export class FieldController {
     this.intersectionObserver.observe(el);
     this.rechunk();
     this.scheduleRender();
-    this.scheduleCheck();
+    this.env.reportStatus?.({ phase: 'idle', count: 0 });
   }
 
   deactivate(): void {
@@ -140,6 +167,36 @@ export class FieldController {
     }
     this.underlines.clear();
     this.card.hide();
+    this.userEdited = false;
+    this.report(0);
+    this.env.reportStatus?.({ phase: 'idle', count: 0 });
+  }
+
+  settingsChanged(): void {
+    clearTimeout(this.debounceTimer);
+    if (this.pending.size > 0) {
+      this.env.port.cancel([...this.pending.keys()]);
+      this.pending.clear();
+    }
+    this.issuesByHash.clear();
+    this.dismissed.clear();
+    this.ignoredWords.clear();
+    this.currentIssues = [];
+    this.droppedCount = 0;
+    this.incompleteHint = null;
+    this.hasCompletedCheck = false;
+    this.card.hide();
+    this.underlines.clear();
+    this.status.clear();
+    this.rechunk();
+    this.report(0);
+    if (this.active && this.userEdited) {
+      this.env.reportStatus?.({ phase: 'checking', count: 0 });
+      this.scheduleRender();
+      this.scheduleCheck();
+    } else {
+      this.env.reportStatus?.({ phase: 'idle', count: 0 });
+    }
   }
 
   private getText(): string {
@@ -203,24 +260,54 @@ export class FieldController {
       );
     }
     const pendingHashes = new Set(this.pending.values());
+    let sent = false;
     for (const chunk of eligible) {
       if (this.issuesByHash.has(chunk.hash) || pendingHashes.has(chunk.hash)) continue;
-      const requestId = `ink-${++requestCounter}-${chunk.hash.slice(0, 6)}`;
+      const requestId = crypto.randomUUID();
       this.pending.set(requestId, chunk.hash);
       pendingHashes.add(chunk.hash);
       this.env.port.check(requestId, chunk.hash, chunk.text, (resp) =>
         this.onCheckResponse(requestId, resp),
       );
+      sent = true;
+    }
+    if (sent) {
+      this.status.announce({ state: 'checking' }, this.statusAnchor());
+      this.env.reportStatus?.({ phase: 'checking', count: 0 });
+    } else if (this.userEdited && this.pending.size === 0) {
+      this.hasCompletedCheck = true;
+      this.scheduleRender();
     }
   }
 
   private onCheckResponse(requestId: string, resp: PortResponse): void {
     this.pending.delete(requestId);
     if (resp.t === 'error') {
-      console.debug('[Inkwell] check failed:', resp.code, resp.hint);
+      // console.warn, not debug: a silent failure here is indistinguishable
+      // from "your writing is fine", which is the worst thing a proofreader
+      // can do. The popup surfaces the same failure via Test connection.
+      console.warn(`[Inkwell] check failed (${resp.code}): ${resp.hint}`);
+      if (this.pending.size > 0) {
+        const remaining = [...this.pending.keys()];
+        this.pending.clear();
+        this.env.port.cancel(remaining);
+      }
+      this.hasCompletedCheck = false;
+      this.status.announce({ state: 'error', message: resp.hint }, this.statusAnchor());
+      this.report(0);
+      this.env.reportStatus?.({ phase: 'error', count: 0, code: resp.code, hint: resp.hint });
       return;
     }
+    this.droppedCount += Math.max(0, Math.trunc(resp.dropped ?? 0));
+    if (resp.incomplete) this.incompleteHint ??= resp.incomplete.hint;
+    if (resp.dropped && resp.issues.length === 0) {
+      console.warn(
+        `[Inkwell] the model reported ${resp.dropped} issue(s) but quoted text that is not in the page, ` +
+          'so none could be shown. Try a stronger model.',
+      );
+    }
     this.issuesByHash.set(resp.chunkHash, resp.issues);
+    if (this.pending.size === 0) this.hasCompletedCheck = true;
     if (this.active && this.chunks.some((c) => c.hash === resp.chunkHash)) {
       this.scheduleRender();
     }
@@ -245,10 +332,23 @@ export class FieldController {
       const issues = this.issuesByHash.get(chunk.hash);
       if (!issues) continue;
       for (const issue of issues) {
-        if (this.dismissed.has(issue.id)) continue;
+        if (
+          issue.type === 'spelling' &&
+          this.ignoredWords.has(issue.original.toLocaleLowerCase('en'))
+        ) {
+          continue;
+        }
+        const docStart = chunk.docOffset + issue.start;
+        // The issue id is a hash of the wording, so the same typo in two
+        // paragraphs yields the same id. Qualifying it with the document
+        // offset keeps each occurrence separately clickable and dismissable —
+        // without this, clicking the second underline edits the first one.
+        const id = `${issue.id}@${docStart}`;
+        if (this.dismissed.has(id)) continue;
         docIssues.push({
           ...issue,
-          docStart: chunk.docOffset + issue.start,
+          id,
+          docStart,
           docEnd: chunk.docOffset + issue.end,
           chunkHash: chunk.hash,
         });
@@ -296,7 +396,44 @@ export class FieldController {
       if (rects.length > 0) visibleSpecs.push({ ...spec, rects });
     }
     this.underlines.render(visibleSpecs);
-    this.report(this.currentIssues.length);
+    const visibleCount = new Set(visibleSpecs.map((spec) => spec.issueId)).size;
+    this.report(visibleCount);
+    if (this.hasCompletedCheck && this.pending.size === 0) {
+      if (this.incompleteHint) {
+        this.status.announce(
+          {
+            state: 'partial',
+            issueCount: visibleCount,
+            droppedCount: this.droppedCount,
+            message: this.incompleteHint,
+          },
+          this.statusAnchor(),
+        );
+        this.env.reportStatus?.({
+          phase: 'partial',
+          count: visibleCount,
+          hint: this.incompleteHint,
+        });
+      } else if (this.droppedCount > 0) {
+        this.status.announce(
+          { state: 'partial', issueCount: visibleCount, droppedCount: this.droppedCount },
+          this.statusAnchor(),
+        );
+        this.env.reportStatus?.({
+          phase: 'partial',
+          count: visibleCount,
+          hint: `${this.droppedCount} model suggestion${this.droppedCount === 1 ? '' : 's'} could not be located safely.`,
+        });
+      } else {
+        this.status.announce({ state: 'checked', issueCount: visibleCount }, this.statusAnchor());
+        this.env.reportStatus?.({ phase: 'checked', count: visibleCount });
+      }
+    }
+  }
+
+  private statusAnchor(): Rect {
+    const rect = this.target.el.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, width: rect.width, height: rect.height };
   }
 
   /** Intersection of every scrolling ancestor's box — underlines must not leak
@@ -351,12 +488,14 @@ export class FieldController {
       if (list) {
         this.issuesByHash.set(
           issue.chunkHash,
-          list.filter((i) => i.id !== issue.id),
+          list.filter((candidate) => !this.isSourceIssue(candidate, issue)),
         );
       }
       this.scheduleRender();
       return;
     }
+    this.userEdited = true;
+    this.handleTextChange();
     // The input event from applyFix already re-chunked. Warm the field cache
     // for the post-fix chunk so the paragraph's other underlines survive
     // without another round trip to the model.
@@ -366,7 +505,7 @@ export class FieldController {
       const delta = issue.replacement.length - (issue.end - issue.start);
       const shifted: IssueDto[] = [];
       for (const other of list) {
-        if (other.id === issue.id) continue;
+        if (this.isSourceIssue(other, issue)) continue;
         if (other.start >= issue.end) {
           shifted.push({ ...other, start: other.start + delta, end: other.end + delta });
         } else if (other.end <= issue.start) {
@@ -377,6 +516,16 @@ export class FieldController {
       this.issuesByHash.set(fnvHash(newChunkText), shifted);
     }
     this.scheduleRender();
+  }
+
+  private isSourceIssue(candidate: IssueDto, issue: DocIssue): boolean {
+    return (
+      `${candidate.id}@${issue.docStart}` === issue.id &&
+      candidate.start === issue.start &&
+      candidate.end === issue.end &&
+      candidate.original === issue.original &&
+      candidate.replacement === issue.replacement
+    );
   }
 
   /**
@@ -395,6 +544,11 @@ export class FieldController {
 
   private dismiss(issue: DocIssue): void {
     this.dismissed.add(issue.id);
+    this.scheduleRender();
+  }
+
+  private ignoreAll(word: string): void {
+    this.ignoredWords.add(word.toLocaleLowerCase('en'));
     this.scheduleRender();
   }
 

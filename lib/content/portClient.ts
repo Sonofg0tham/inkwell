@@ -18,7 +18,7 @@ export class PortClient {
   private port: chrome.runtime.Port | null = null;
   private outstanding = new Map<string, Outstanding>();
   private pingTimer: ReturnType<typeof setInterval> | undefined;
-  private dead = false;
+  dead = false;
 
   check(
     requestId: string,

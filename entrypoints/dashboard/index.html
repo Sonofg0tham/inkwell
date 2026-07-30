@@ -1,0 +1,347 @@
+<!doctype html>
+<html lang="en-GB">
+  <head>
+    <meta charset="utf-8" />
+    <title>Inkwell — Your Writing Assistant</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <main
+      id="setup-required"
+      class="setup-gate"
+      aria-labelledby="setup-required-title"
+      hidden
+    >
+      <section class="setup-sheet">
+        <p class="setup-eyebrow">Privacy setup required</p>
+        <h1 id="setup-required-title" tabindex="-1">Your documents are still closed</h1>
+        <p class="setup-copy">
+          Inkwell will not open stored documents or check any writing until you review how text is
+          processed and make a privacy choice.
+        </p>
+        <div class="setup-action-row">
+          <button id="btn-open-privacy-setup" class="btn-primary" type="button">
+            Open privacy setup
+          </button>
+          <p id="setup-required-status" role="status">
+            Complete setup in the extension settings. This workspace will unlock afterwards.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <div id="dashboard-shell" class="app-shell" hidden>
+
+      <!-- ═══ SIDEBAR ═══ -->
+      <aside class="sidebar" role="navigation" aria-label="Primary navigation">
+        <div class="sidebar-header">
+          <div id="blotty-sidebar" class="blotty-small" aria-hidden="true"></div>
+          <span class="sidebar-wordmark">Inkwell</span>
+        </div>
+
+        <nav class="sidebar-nav">
+          <button id="nav-active-docs" class="nav-item active" aria-current="page">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M4 4h12v12H4V4z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+              <path d="M7 8h6M7 11h4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Docs</span>
+          </button>
+          <button id="nav-trash" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M7 4h6M5 7h10l-1 10H6L5 7z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            <span>Trash</span>
+          </button>
+          <button id="nav-settings" class="nav-item">
+            <svg class="nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <circle cx="10" cy="10" r="3" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M10 2v2M10 16v2M2 10h2M16 10h2M4.22 4.22l1.42 1.42M14.36 14.36l1.42 1.42M4.22 15.78l1.42-1.42M14.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span>Settings</span>
+          </button>
+        </nav>
+
+        <div class="sidebar-actions">
+          <button id="btn-new-doc" class="btn-new-doc">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+              <path d="M10 4v12M4 10h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+            New doc
+          </button>
+        </div>
+
+        <div class="sidebar-footer">
+          <span class="sidebar-version">v0.1 · Your model, your words</span>
+        </div>
+      </aside>
+
+      <!-- ═══ MAIN AREA ═══ -->
+      <div class="main-area">
+
+        <!-- ── DOCS HUB ──
+             document-list and trash-list live together here.
+             display toggled by JS to match nav selection. -->
+        <div class="hub-view">
+          <header class="hub-header">
+            <div class="hub-title-row">
+              <h1 id="hub-heading" class="hub-title">Docs</h1>
+              <div class="hub-actions">
+                <button id="btn-import-doc" class="btn-ghost">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M8 11V2m0 0L5 5m3-3l3 3M2.5 10.5v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Import
+                </button>
+                <button id="btn-new-doc-hub" class="btn-primary">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M8 2v12M2 8h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                  </svg>
+                  New doc
+                </button>
+                <button id="btn-empty-trash" class="btn-ghost btn-danger" style="display:none">Empty trash</button>
+                <input type="file" id="import-file-input" accept=".txt,.md,.markdown,.text,.docx,.pdf" hidden />
+              </div>
+            </div>
+            <div class="hub-search-row" id="hub-search-row">
+              <div class="search-wrap">
+                <svg class="search-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                  <circle cx="9" cy="9" r="5.5" stroke="currentColor" stroke-width="1.5"/>
+                  <path d="M13.5 13.5L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <input type="search" id="search-docs" class="search-input" placeholder="Search docs…" aria-label="Search documents" />
+              </div>
+            </div>
+          </header>
+
+          <p id="import-status" class="import-status" role="status" hidden></p>
+
+          <!-- Active docs list -->
+          <div class="document-index-heading">
+            <p class="eyebrow">Private workspace</p>
+            <h2 id="recent-writing-heading">Recent writing</h2>
+          </div>
+          <div id="document-list" class="doc-grid" role="list" aria-label="Documents"></div>
+          <div id="docs-empty" class="empty-state" style="display:none">
+            <div id="blotty-empty" class="blotty-empty" aria-hidden="true"></div>
+            <h2 class="empty-title">No documents yet</h2>
+            <p class="empty-body">Create a document, or drop in a .txt, .md, .docx or .pdf to check writing you already have.</p>
+            <div class="empty-actions">
+              <button id="btn-new-doc-empty" class="btn-primary">New doc</button>
+              <button id="btn-import-doc-empty" class="btn-ghost">Import a file</button>
+            </div>
+          </div>
+
+          <!-- Trash list -->
+          <div id="trash-list" class="doc-grid" role="list" aria-label="Trashed documents" style="display:none"></div>
+          <div id="trash-empty" class="empty-state" style="display:none">
+            <h2 class="empty-title">Trash is empty</h2>
+            <p class="empty-body">Deleted documents will appear here.</p>
+          </div>
+
+          <!-- Settings view -->
+          <div id="settings-view" class="settings-body" style="display:none">
+            <div class="settings-card">
+              <h2 class="settings-section-title">AI Provider</h2>
+              <p class="settings-card-intro">Run a private model on your own machine, or bring an API key from a cloud provider.</p>
+              <div class="settings-field">
+                <label class="settings-label" for="settings-provider-kind">Provider</label>
+                <select id="settings-provider-kind" class="settings-select">
+                  <optgroup label="On this device — private, free">
+                    <option value="ollama">Ollama (local)</option>
+                    <option value="openai-compat">LM Studio / OpenAI-compatible</option>
+                  </optgroup>
+                  <optgroup label="Cloud — bring your own API key">
+                    <option value="openrouter">OpenRouter (many models, free options)</option>
+                    <option value="gemini">Google Gemini (generous free tier)</option>
+                    <option value="openai">OpenAI</option>
+                    <option value="anthropic">Anthropic</option>
+                  </optgroup>
+                </select>
+                <p class="settings-hint" id="settings-cloud-notice" hidden>
+                  Workspace text is sent to this provider when Inkwell checks it. Website fields still need per-site approval.
+                </p>
+              </div>
+              <div class="settings-field" id="settings-api-key-field" hidden>
+                <label class="settings-label" for="settings-api-key">API key</label>
+                <div class="settings-key-row">
+                  <input type="password" id="settings-api-key" class="settings-input" autocomplete="off" spellcheck="false" placeholder="Paste your key" />
+                  <button id="settings-remove-key" class="btn-ghost btn-sm" type="button" hidden>Remove</button>
+                </div>
+                <p class="settings-hint">Stored only on this device, never synced, never logged.</p>
+                <p class="settings-hint" id="settings-key-help" hidden><a id="settings-key-help-link" href="#" target="_blank" rel="noreferrer noopener"></a></p>
+              </div>
+              <div class="settings-field">
+                <label class="settings-label" for="settings-provider-model">Model</label>
+                <div class="settings-key-row">
+                  <input type="text" id="settings-provider-model" class="settings-input" list="settings-model-list" spellcheck="false" autocomplete="off" value="qwen2.5:7b-instruct" />
+                  <button id="settings-fetch-models" class="btn-ghost btn-sm" type="button">Fetch models</button>
+                </div>
+                <datalist id="settings-model-list"></datalist>
+              </div>
+              <div class="settings-field">
+                <button id="settings-test-btn" class="btn-ghost btn-sm" type="button">Test connection</button>
+                <p class="settings-hint" id="settings-status" role="status"></p>
+              </div>
+            </div>
+            <div class="settings-card">
+              <h2 class="settings-section-title">Checking Preferences</h2>
+              <div class="settings-field">
+                <label class="settings-label" for="settings-strictness">Strictness</label>
+                <select id="settings-strictness" class="settings-select">
+                  <option value="standard">Standard</option>
+                  <option value="picky">Picky</option>
+                </select>
+              </div>
+              <div class="settings-field">
+                <label class="settings-label">Check for</label>
+                <div class="settings-checkboxes">
+                  <label class="settings-check"><input type="checkbox" id="settings-categories-spelling" checked /> Spelling</label>
+                  <label class="settings-check"><input type="checkbox" id="settings-categories-grammar" checked /> Grammar</label>
+                  <label class="settings-check"><input type="checkbox" id="settings-categories-punctuation" checked /> Punctuation</label>
+                  <label class="settings-check"><input type="checkbox" id="settings-categories-style" checked /> Style</label>
+                </div>
+              </div>
+            </div>
+            <div class="settings-card">
+              <h2 class="settings-section-title">Where documents are saved</h2>
+              <p class="settings-card-intro">
+                Documents live in this browser profile by default. Choose a folder, then use Save copies now
+                to write plain Markdown copies. If that folder belongs to a desktop sync service, the service
+                may upload those files under its own terms.
+              </p>
+              <p class="settings-hint" id="storage-usage">Checking storage…</p>
+              <div class="settings-field">
+                <p class="settings-hint" id="sync-folder-state">No folder chosen.</p>
+                <div class="settings-key-row">
+                  <button id="btn-choose-folder" class="btn-ghost btn-sm" type="button">Choose folder</button>
+                  <button id="btn-sync-now" class="btn-primary btn-sm" type="button" hidden>Save copies now</button>
+                  <button id="btn-forget-folder" class="btn-ghost btn-sm" type="button" hidden>Forget</button>
+                </div>
+                <p class="settings-hint" id="sync-status" role="status"></p>
+              </div>
+            </div>
+            <button id="settings-save-btn" class="btn-primary">Save settings</button>
+            <section class="settings-card settings-handoff" aria-labelledby="settings-handoff-title">
+              <p class="eyebrow">More options</p>
+              <h2 id="settings-handoff-title" class="settings-section-title">Advanced settings</h2>
+              <p>Custom server addresses, dialect, formality and private-site rules live in the full extension settings.</p>
+              <button id="btn-open-settings" class="btn-ghost" type="button">Open advanced settings</button>
+            </section>
+          </div>
+        </div><!-- /hub-view -->
+
+        <!-- ── EDITOR + SUGGESTIONS ── -->
+        <div id="editor-container" class="editor-layout" style="display:none">
+
+          <!-- Editor panel -->
+          <div class="editor-panel">
+            <div class="editor-topbar">
+              <button id="btn-back-to-docs" class="btn-back" aria-label="Back to documents">
+                <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path d="M9.5 3.5L5 8l4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                Docs
+              </button>
+              <input type="text" id="editor-title" class="editor-title-input" placeholder="Untitled document" aria-label="Document title" />
+              <div class="editor-topbar-right">
+                <span id="word-count" class="topbar-stat">0 words</span>
+                <span id="readability-score" class="topbar-stat score-pill">Score: –</span>
+                <div class="export-wrap">
+                  <button id="btn-export" class="btn-ghost btn-sm" type="button" aria-haspopup="menu" aria-expanded="false">
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M8 2v9m0 0L5 8m3 3l3-3M2.5 11.5v2a1 1 0 001 1h9a1 1 0 001-1v-2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Export
+                  </button>
+                  <div id="export-menu" class="export-menu" role="menu" hidden>
+                    <button class="export-option" data-format="pdf" role="menuitem">PDF</button>
+                    <button class="export-option" data-format="docx" role="menuitem">Word (.docx)</button>
+                    <button class="export-option" data-format="md" role="menuitem">Markdown (.md)</button>
+                    <button class="export-option" data-format="txt" role="menuitem">Plain text (.txt)</button>
+                  </div>
+                </div>
+                <button id="btn-delete-doc" class="btn-ghost btn-danger btn-sm" aria-label="Move to trash">
+                  <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M5 4h6M3 6h10l-.8 8H3.8L3 6z" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+                  </svg>
+                  Delete
+                </button>
+              </div>
+            </div>
+
+            <div class="formatting-bar" role="toolbar" aria-label="Formatting">
+              <button id="btn-bold" class="fmt-btn" title="Bold" aria-label="Bold">
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><text x="2" y="13" font-weight="900" font-size="13" font-family="serif">B</text></svg>
+              </button>
+              <button id="btn-italic" class="fmt-btn" title="Italic" aria-label="Italic">
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><text x="4" y="13" font-style="italic" font-size="13" font-family="serif">I</text></svg>
+              </button>
+              <button id="btn-underline" class="fmt-btn" title="Underline" aria-label="Underline">
+                <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                  <text x="2.5" y="11" font-size="11" font-family="serif">U</text>
+                  <line x1="2" y1="14" x2="14" y2="14" stroke="currentColor" stroke-width="1.5"/>
+                </svg>
+              </button>
+              <div class="fmt-separator" aria-hidden="true"></div>
+              <span class="fmt-label">Markdown supported</span>
+            </div>
+
+            <div class="editor-canvas-wrap writing-canvas">
+              <textarea
+                id="editor-textarea"
+                class="editor-textarea"
+                placeholder="Start writing, or paste text here…&#10;&#10;Inkwell will check your grammar, spelling, and style as you type."
+                aria-label="Document editor"
+                spellcheck="false"
+              ></textarea>
+              <div id="underline-overlay" class="underline-overlay" aria-hidden="true"></div>
+            </div>
+          </div>
+
+          <!-- Suggestions sidebar -->
+          <aside id="suggestions-panel" class="suggestions-panel" aria-label="Editorial suggestions">
+            <div class="suggestions-header">
+              <div class="suggestions-title-row">
+                <h2 class="suggestions-title">Writing pulse</h2>
+                <div class="pulse-row">
+                  <span id="writing-pulse" class="writing-pulse" data-state="idle">Start writing to review</span>
+                  <button id="btn-check-now" class="btn-check-now" type="button">Check now</button>
+                </div>
+                <div class="edit-actions-row">
+                  <button id="btn-fix-all" class="btn-primary btn-sm" type="button" hidden>Fix all</button>
+                  <button id="btn-undo" class="btn-ghost btn-sm" type="button" disabled>
+                    <svg viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M3 8h7a3 3 0 010 6H7M3 8l3-3M3 8l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Undo
+                  </button>
+                </div>
+              </div>
+              <p class="suggestions-intro">Inkwell reviews spelling, grammar and style using your selected model.</p>
+              <div class="suggestions-tabs" role="tablist">
+                <button class="sugg-tab active" data-filter="all" role="tab" aria-selected="true">All <span class="tab-count"></span></button>
+                <button class="sugg-tab" data-filter="grammar" role="tab" aria-selected="false">Grammar <span class="tab-count"></span></button>
+                <button class="sugg-tab" data-filter="spelling" role="tab" aria-selected="false">Spelling <span class="tab-count"></span></button>
+                <button class="sugg-tab" data-filter="style" role="tab" aria-selected="false">Style <span class="tab-count"></span></button>
+              </div>
+            </div>
+            <div id="suggestions-list" class="suggestions-list" role="list" aria-live="polite"></div>
+            <div id="suggestions-empty" class="suggestions-empty" style="display:none">
+              <div id="blotty-happy" class="blotty-sugg" aria-hidden="true"></div>
+              <p class="sugg-empty-text">Writing looks clear. Inkwell will keep monitoring as you type.</p>
+            </div>
+            <div id="suggestions-idle" class="suggestions-idle">
+              <p class="sugg-idle-text">Open a document and start typing to see suggestions…</p>
+            </div>
+            <p id="check-provenance" class="check-provenance" hidden></p>
+          </aside>
+
+        </div><!-- /editor-container -->
+
+      </div><!-- /main-area -->
+    </div><!-- /app-shell -->
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

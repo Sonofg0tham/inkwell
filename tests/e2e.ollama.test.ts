@@ -6,7 +6,7 @@ import { locateIssues } from '../lib/checker/anchor';
 import { buildMessages } from '../lib/checker/prompt';
 import { ISSUE_JSON_SCHEMA, parseIssues } from '../lib/checker/schema';
 import { ollamaProvider } from '../lib/providers/ollama';
-import { DEFAULT_SETTINGS } from '../lib/settings/schema';
+import { DEFAULT_MODELS, DEFAULT_SETTINGS } from '../lib/settings/schema';
 
 const BASE_URL = 'http://localhost:11434';
 
@@ -17,7 +17,7 @@ async function firstModel(): Promise<string | null> {
       baseUrl: BASE_URL,
       model: '',
     });
-    return models[0] ?? null;
+    return models.includes(DEFAULT_MODELS.ollama) ? DEFAULT_MODELS.ollama : (models[0] ?? null);
   } catch {
     return null;
   }

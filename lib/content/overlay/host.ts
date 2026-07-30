@@ -7,10 +7,17 @@ const OVERLAY_CSS = `
   all: initial;
 }
 .ink-seg {
+  all: unset;
   position: fixed;
+  box-sizing: border-box;
   pointer-events: auto;
   cursor: pointer;
   border-radius: 2px;
+}
+.ink-seg:focus-visible {
+  outline: 3px solid #9b3c1f;
+  outline-offset: 3px;
+  box-shadow: 0 0 0 2px #fffdf8;
 }
 .ink-seg::before {
   content: '';
@@ -86,12 +93,16 @@ const OVERLAY_CSS = `
   cursor: pointer;
   border: 1px solid transparent;
 }
+.ink-card-btn:focus-visible {
+  outline: 3px solid #9b3c1f;
+  outline-offset: 2px;
+}
 .ink-card-btn-apply {
-  background: #e86a3d;
+  background: #c14315;
   color: #fffdf8;
 }
 .ink-card-btn-apply:hover {
-  background: #d55a2e;
+  background: #9b3c1f;
 }
 .ink-card-btn-dismiss {
   background: transparent;
@@ -110,6 +121,49 @@ const OVERLAY_CSS = `
   border-style: solid;
   border-color: transparent;
 }
+.ink-status {
+  position: fixed;
+  box-sizing: border-box;
+  max-width: min(280px, calc(100vw - 16px));
+  padding: 5px 9px;
+  background: #fffdf8;
+  color: #3f3b32;
+  border: 1px solid #d8cfbd;
+  border-radius: 8px;
+  box-shadow: 0 3px 12px rgba(35, 39, 58, 0.14);
+  font-family: -apple-system, 'Segoe UI', system-ui, sans-serif;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.35;
+  white-space: normal;
+  pointer-events: none;
+}
+.ink-status[hidden] {
+  display: none;
+}
+.ink-status[data-state='checking'] {
+  border-color: #b8a98d;
+}
+.ink-status[data-state='checked'] {
+  border-color: #879b75;
+}
+.ink-status[data-state='partial'] {
+  border-color: #b97816;
+}
+.ink-status[data-state='error'] {
+  border-color: #b83a3f;
+  color: #7f2025;
+}
+@media (forced-colors: active) {
+  .ink-seg {
+    background: Highlight !important;
+    forced-color-adjust: none;
+  }
+  .ink-seg:focus-visible,
+  .ink-card-btn:focus-visible {
+    outline: 3px solid Highlight;
+  }
+}
 `;
 
 export interface OverlayHost {
@@ -119,6 +173,8 @@ export interface OverlayHost {
   segLayer: HTMLDivElement;
   /** Container for the suggestion card. */
   cardLayer: HTMLDivElement;
+  /** Screen-reader status updates for the active checker. */
+  statusLayer: HTMLDivElement;
   /** Hidden measurement area (textarea mirror). */
   measureLayer: HTMLDivElement;
 }
@@ -130,18 +186,26 @@ export function getOverlayHost(): OverlayHost {
   const hostEl = document.createElement('inkwell-overlay');
   hostEl.style.cssText =
     'position:fixed;top:0;left:0;width:0;height:0;z-index:2147483646;pointer-events:none;';
-  const root = hostEl.attachShadow({ mode: 'open' });
+  // Keep the UI out of reach of page scripts. We retain the returned root so
+  // extension code can still render and manage focus inside it.
+  const root = hostEl.attachShadow({ mode: 'closed' });
   const style = document.createElement('style');
   style.textContent = OVERLAY_CSS;
   const layer = document.createElement('div');
   layer.className = 'ink-layer';
   const segLayer = document.createElement('div');
   const cardLayer = document.createElement('div');
+  const statusLayer = document.createElement('div');
+  statusLayer.className = 'ink-status';
+  statusLayer.setAttribute('role', 'status');
+  statusLayer.setAttribute('aria-live', 'polite');
+  statusLayer.setAttribute('aria-atomic', 'true');
+  statusLayer.hidden = true;
   const measureLayer = document.createElement('div');
-  layer.append(segLayer, cardLayer, measureLayer);
+  layer.append(segLayer, cardLayer, statusLayer, measureLayer);
   root.append(style, layer);
   document.documentElement.appendChild(hostEl);
-  singleton = { hostEl, root, segLayer, cardLayer, measureLayer };
+  singleton = { hostEl, root, segLayer, cardLayer, statusLayer, measureLayer };
   return singleton;
 }
 

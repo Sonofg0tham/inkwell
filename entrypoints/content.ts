@@ -1,48 +1,90 @@
-import { startWatcher } from '../lib/content/editableWatcher';
+import { startWatcher, type WatcherHandle } from '../lib/content/editableWatcher';
 import { PortClient } from '../lib/content/portClient';
 import type { FieldEnv } from '../lib/content/fieldController';
+import type { ContentBroadcast, FrameCheckState } from '../lib/messaging/protocol';
 import { sendTyped } from '../lib/messaging/typed';
-import { DEFAULT_SETTINGS, type Settings } from '../lib/settings/schema';
-import { loadSettings, watchSettings } from '../lib/settings/store';
+import { providerUsesRemoteEndpoint } from '../lib/providers/validation';
+import {
+  CURRENT_DATA_CONSENT_VERSION,
+  DEFAULT_SETTINGS,
+  type Settings,
+} from '../lib/settings/schema';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   allFrames: true,
+  matchAboutBlank: true,
   runAt: 'document_idle',
   main() {
     let settings: Settings = DEFAULT_SETTINGS;
-    let stop: (() => void) | null = null;
+    let watcher: WatcherHandle | null = null;
+    let stateSequence = 0;
     const port = new PortClient();
+
+    const reportState = (state: Omit<FrameCheckState, 'sequence'>): void => {
+      void sendTyped({
+        t: 'reportFrameState',
+        state: { ...state, sequence: ++stateSequence },
+      }).catch(() => {
+        // The service worker may be restarting. The next state supersedes this.
+      });
+    };
 
     const env: FieldEnv = {
       getSettings: () => settings,
       port,
-      reportCount: (count) => {
-        void sendTyped({ t: 'reportIssueCount', count }).catch(() => {
-          // background asleep or extension reloading — badge catches up later
+      // Phase-aware reports below carry the count as well. Keep this narrow
+      // hook for controller tests and older callers without duplicating IPC.
+      reportCount: () => undefined,
+      reportStatus: reportState,
+      addToDictionary: (word) => {
+        void sendTyped({ t: 'addPersonalDictionaryWord', word }).catch(() => {
+          console.warn('[Inkwell] Could not save the personal dictionary word.');
         });
       },
     };
 
     const evaluate = (): void => {
       const host = location.hostname;
-      const on = settings.enabled && !settings.disabledSites.includes(host);
-      if (on && !stop) {
-        stop = startWatcher(env);
-      } else if (!on && stop) {
-        stop();
-        stop = null;
-        env.reportCount(0);
+      const usesCloud = providerUsesRemoteEndpoint(
+        settings.provider.kind,
+        settings.provider.baseUrl,
+      );
+      const on =
+        settings.enabled &&
+        settings.dataConsentVersion >= CURRENT_DATA_CONSENT_VERSION &&
+        !settings.disabledSites.includes(host) &&
+        (!usesCloud || settings.cloudAllowedSites.includes(host));
+      if (on && !watcher) {
+        watcher = startWatcher(env);
+      } else if (!on && watcher) {
+        watcher.stop();
+        watcher = null;
+        reportState({ phase: 'idle', count: 0 });
       }
     };
 
-    void loadSettings().then((s) => {
-      settings = s;
+    chrome.runtime.onMessage.addListener((message: ContentBroadcast) => {
+      if (message?.t !== 'contentSettingsChanged') return;
+      settings = message.settings;
+      watcher?.settingsChanged();
       evaluate();
     });
-    watchSettings((s) => {
-      settings = s;
-      evaluate();
-    });
+
+    void sendTyped({ t: 'getContentSettings' })
+      .then((nextSettings) => {
+        settings = nextSettings;
+        evaluate();
+      })
+      .catch(() => {
+        // Fail closed if the trusted settings boundary is unavailable. Running
+        // with defaults could silently enable checking on a disabled site.
+        reportState({
+          phase: 'error',
+          count: 0,
+          code: 'network',
+          hint: 'Inkwell could not load its settings. Reload the page and try again.',
+        });
+      });
   },
 });

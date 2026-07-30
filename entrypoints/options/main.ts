@@ -4,16 +4,37 @@ import { blottySvg } from '../../lib/ui/blotty';
 import { sendTyped } from '../../lib/messaging/typed';
 import {
   CLOUD_KINDS,
+  CURRENT_DATA_CONSENT_VERSION,
   DEFAULT_BASE_URLS,
-  normalizeBaseUrl,
+  DEFAULT_MODELS,
+  DIALECTS,
+  KEY_HELP_URLS,
   PROVIDER_KINDS,
+  PROVIDER_LABELS,
   type ProviderKind,
   type Settings,
 } from '../../lib/settings/schema';
-import { hasSecret, loadSettings, saveSecret, saveSettings } from '../../lib/settings/store';
+import {
+  addPersonalDictionaryWord,
+  clearPersonalDictionary,
+  hasSecret,
+  loadSettings,
+  removePersonalDictionaryWord,
+  saveSecret,
+  saveSettings,
+} from '../../lib/settings/store';
+import {
+  ProviderEndpointError,
+  requestProviderOriginPermission,
+  validateProviderEndpoint,
+} from '../../lib/providers/validation';
 
 const blottyEl = document.getElementById('blotty')!;
 const form = document.getElementById('settings-form') as HTMLFormElement;
+const consentPanel = document.getElementById('privacy-consent')!;
+const consentTitle = document.getElementById('privacy-consent-title')!;
+const consentCheckbox = document.getElementById('data-consent') as HTMLInputElement;
+const consentState = document.getElementById('consent-state')!;
 const providerSelect = document.getElementById('provider') as HTMLSelectElement;
 const cloudNotice = document.getElementById('cloud-notice')!;
 const baseUrlInput = document.getElementById('base-url') as HTMLInputElement;
@@ -28,6 +49,12 @@ const modelsHint = document.getElementById('models-hint')!;
 const formalitySelect = document.getElementById('formality') as HTMLSelectElement;
 const strictnessSelect = document.getElementById('strictness') as HTMLSelectElement;
 const blocklistArea = document.getElementById('blocklist') as HTMLTextAreaElement;
+const dictionaryInput = document.getElementById('dictionary-word') as HTMLInputElement;
+const dictionaryAdd = document.getElementById('dictionary-add') as HTMLButtonElement;
+const dictionaryClear = document.getElementById('dictionary-clear') as HTMLButtonElement;
+const dictionaryList = document.getElementById('dictionary-list') as HTMLUListElement;
+const dictionaryEmpty = document.getElementById('dictionary-empty')!;
+const dictionaryStatus = document.getElementById('dictionary-status')!;
 const saveBtn = document.getElementById('save-btn') as HTMLButtonElement;
 const saveResult = document.getElementById('save-result')!;
 
@@ -42,6 +69,19 @@ blottyEl.innerHTML = blottySvg('happy', 56); // static SVG, no user data
 
 let current: Settings;
 
+function updateConsentUi(accepted: boolean): void {
+  consentPanel.setAttribute('data-state', accepted ? 'accepted' : 'pending');
+  consentCheckbox.checked = accepted;
+  consentCheckbox.disabled = accepted;
+  consentState.textContent = accepted
+    ? 'Privacy choice saved. Inkwell can now check writing when you enable it.'
+    : 'Required before Inkwell can check text or open stored documents.';
+}
+
+function extensionOrigin(): string {
+  return chrome.runtime.getURL('').replace(/\/$/, '');
+}
+
 function selectedKind(): ProviderKind {
   const v = providerSelect.value as ProviderKind;
   return PROVIDER_KINDS.includes(v) ? v : 'ollama';
@@ -49,7 +89,37 @@ function selectedKind(): ProviderKind {
 
 function selectedDialect(): Settings['dialect'] {
   const checked = form.querySelector<HTMLInputElement>('input[name="dialect"]:checked');
-  return checked?.value === 'en-US' ? 'en-US' : 'en-GB';
+  const value = checked?.value;
+  return value && (DIALECTS as readonly string[]).includes(value)
+    ? value as Settings['dialect']
+    : 'en-GB';
+}
+
+function renderDictionary(): void {
+  dictionaryList.replaceChildren(...current.personalDictionary.map((word) => {
+    const item = document.createElement('li');
+    item.className = 'dictionary-item';
+    const label = document.createElement('span');
+    label.textContent = word;
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'dictionary-remove';
+    remove.dataset.removeWord = word;
+    remove.textContent = 'Remove';
+    remove.setAttribute('aria-label', `Remove ${word} from personal dictionary`);
+    item.append(label, remove);
+    return item;
+  }));
+  const empty = current.personalDictionary.length === 0;
+  dictionaryEmpty.hidden = !empty;
+  dictionaryList.hidden = empty;
+  dictionaryClear.hidden = empty;
+}
+
+async function refreshDictionary(message: string): Promise<void> {
+  current = await loadSettings();
+  renderDictionary();
+  dictionaryStatus.textContent = message;
 }
 
 function showResult(tone: 'ok' | 'error' | 'busy', message: string): void {
@@ -61,7 +131,26 @@ function showResult(tone: 'ok' | 'error' | 'busy', message: string): void {
 async function refreshKeyUi(): Promise<void> {
   const kind = selectedKind();
   apiKeyField.hidden = kind === 'ollama';
-  cloudNotice.hidden = !CLOUD_KINDS.includes(kind);
+  let remoteCustomEndpoint = false;
+  try {
+    remoteCustomEndpoint = !validateProviderEndpoint(
+      kind,
+      baseUrlInput.value || DEFAULT_BASE_URLS[kind],
+    ).isLoopback;
+  } catch {
+    // The submit path supplies the actionable validation error.
+  }
+  cloudNotice.hidden = !CLOUD_KINDS.includes(kind) && !remoteCustomEndpoint;
+  const keyHelp = document.getElementById('key-help')!;
+  const keyHelpLink = document.getElementById('key-help-link') as HTMLAnchorElement;
+  const helpUrl = KEY_HELP_URLS[kind];
+  if (helpUrl) {
+    keyHelpLink.href = helpUrl;
+    keyHelpLink.textContent = `Create a free ${PROVIDER_LABELS[kind]} key ↗`;
+    keyHelp.hidden = false;
+  } else {
+    keyHelp.hidden = true;
+  }
   const saved = await hasSecret(kind);
   apiKeyInput.placeholder = saved ? 'Saved — leave blank to keep it' : 'Paste your key';
   removeKeyBtn.hidden = !saved;
@@ -69,13 +158,23 @@ async function refreshKeyUi(): Promise<void> {
 
 function onProviderChange(previousKind: ProviderKind): void {
   const kind = selectedKind();
-  const value = normalizeBaseUrl(baseUrlInput.value);
-  if (value === '' || value === DEFAULT_BASE_URLS[previousKind]) {
+  const value = baseUrlInput.value.trim().replace(/\/+$/, '');
+  if (CLOUD_KINDS.includes(kind)) {
+    // Cloud providers have one official endpoint — never carry over a local
+    // or custom address when switching to them.
     baseUrlInput.value = DEFAULT_BASE_URLS[kind];
+  } else if (value === '' || value === DEFAULT_BASE_URLS[previousKind]) {
+    baseUrlInput.value = DEFAULT_BASE_URLS[kind];
+  }
+  // Follow the same rule for the model: only replace it if the user hadn't
+  // customised it for the previous provider.
+  const model = modelInput.value.trim();
+  if (model === '' || model === DEFAULT_MODELS[previousKind]) {
+    modelInput.value = DEFAULT_MODELS[kind];
   }
   baseUrlHint.textContent =
     kind === 'ollama'
-      ? 'Default Ollama address. Ollama must be started with OLLAMA_ORIGINS=chrome-extension://* (or *).'
+      ? `Default Ollama address. Allow only this extension origin: OLLAMA_ORIGINS=${extensionOrigin()}. Do not use a wildcard.`
       : kind === 'openai-compat'
         ? 'Default LM Studio address. Works with any OpenAI-compatible server — enable CORS in LM Studio.'
         : 'Official API address — you normally won’t change this.';
@@ -84,39 +183,39 @@ function onProviderChange(previousKind: ProviderKind): void {
   void refreshKeyUi();
 }
 
-/** Origins covered by the static host_permissions in the manifest. */
-function isStaticallyAllowed(origin: string): boolean {
-  const url = new URL(origin);
-  if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
-  return origin === 'https://api.openai.com' || origin === 'https://api.anthropic.com';
-}
-
 /**
  * Validates and saves the form. Returns true on success. Kept synchronous up
  * to the optional permission request — chrome.permissions.request must run
  * inside the user-gesture context.
  */
 async function persist(): Promise<boolean> {
-  const kind = selectedKind();
-  let baseUrl: string;
-  let origin: string;
-  try {
-    baseUrl = normalizeBaseUrl(baseUrlInput.value) || DEFAULT_BASE_URLS[kind];
-    origin = new URL(baseUrl).origin;
-  } catch {
-    showResult('error', 'That server address doesn’t look like a valid URL.');
+  const alreadyAccepted = current.dataConsentVersion >= CURRENT_DATA_CONSENT_VERSION;
+  if (!alreadyAccepted && !consentCheckbox.checked) {
+    showResult('error', 'Review the privacy disclosure and tick the consent box before saving.');
+    consentCheckbox.focus();
     return false;
   }
 
-  if (!isStaticallyAllowed(origin)) {
-    // Runtime grant for custom origins only — never a blanket permission.
-    const granted = await chrome.permissions
-      .request({ origins: [`${origin}/*`] })
-      .catch(() => false);
+  const kind = selectedKind();
+  let endpoint: ReturnType<typeof validateProviderEndpoint>;
+  try {
+    endpoint = validateProviderEndpoint(kind, baseUrlInput.value || DEFAULT_BASE_URLS[kind]);
+  } catch (err) {
+    showResult(
+      'error',
+      err instanceof ProviderEndpointError ? err.message : 'That server address is not valid.',
+    );
+    return false;
+  }
+
+  if (endpoint.requiresPermission) {
+    // This is deliberately the first await in the submit path. Chrome requires
+    // optional permission requests to remain inside the user's click gesture.
+    const granted = await requestProviderOriginPermission(endpoint);
     if (!granted) {
       showResult(
         'error',
-        `Permission for ${origin} was declined, so Inkwell can’t reach it. Nothing was saved.`,
+        `Permission for ${endpoint.origin} was declined, so Inkwell can’t reach it. Nothing was saved.`,
       );
       return false;
     }
@@ -124,9 +223,12 @@ async function persist(): Promise<boolean> {
 
   const settings: Settings = {
     ...current,
+    dataConsentVersion: consentCheckbox.checked
+      ? CURRENT_DATA_CONSENT_VERSION
+      : current.dataConsentVersion,
     provider: {
       kind,
-      baseUrl,
+      baseUrl: endpoint.baseUrl,
       model: modelInput.value.trim() || current.provider.model,
     },
     dialect: selectedDialect(),
@@ -146,6 +248,7 @@ async function persist(): Promise<boolean> {
 
   await saveSettings(settings);
   current = settings;
+  updateConsentUi(current.dataConsentVersion >= CURRENT_DATA_CONSENT_VERSION);
 
   const key = apiKeyInput.value.trim();
   if (key) {
@@ -224,8 +327,61 @@ providerSelect.addEventListener('change', () => {
   current = { ...current, provider: { ...current.provider, kind: selectedKind() } };
 });
 
+baseUrlInput.addEventListener('input', () => void refreshKeyUi());
+
+dictionaryAdd.addEventListener('click', () => {
+  void (async () => {
+    const word = dictionaryInput.value.trim();
+    if (!word || !/^[\p{L}]+(?:['’\-][\p{L}]+)*$/u.test(word)) {
+      dictionaryStatus.textContent = 'Enter a single word. Apostrophes and hyphens are allowed.';
+      dictionaryInput.focus();
+      return;
+    }
+    dictionaryAdd.disabled = true;
+    const added = await addPersonalDictionaryWord(word);
+    dictionaryAdd.disabled = false;
+    if (!added) {
+      dictionaryStatus.textContent = 'That word is already saved, or the dictionary is full.';
+      return;
+    }
+    dictionaryInput.value = '';
+    await refreshDictionary(`${word} added.`);
+  })();
+});
+
+dictionaryInput.addEventListener('keydown', (event) => {
+  if (event.key !== 'Enter') return;
+  event.preventDefault();
+  dictionaryAdd.click();
+});
+
+dictionaryList.addEventListener('click', (event) => {
+  const button = (event.target as Element).closest<HTMLButtonElement>('[data-remove-word]');
+  if (!button?.dataset.removeWord) return;
+  void (async () => {
+    const word = button.dataset.removeWord!;
+    button.disabled = true;
+    await removePersonalDictionaryWord(word);
+    await refreshDictionary(`${word} removed.`);
+  })();
+});
+
+dictionaryClear.addEventListener('click', () => {
+  void (async () => {
+    dictionaryClear.disabled = true;
+    await clearPersonalDictionary();
+    dictionaryClear.disabled = false;
+    await refreshDictionary('Personal dictionary cleared.');
+  })();
+});
+
 async function init(): Promise<void> {
   current = await loadSettings();
+  const accepted = current.dataConsentVersion >= CURRENT_DATA_CONSENT_VERSION;
+  updateConsentUi(accepted);
+  if (!accepted) {
+    requestAnimationFrame(() => consentTitle.focus());
+  }
   providerSelect.value = current.provider.kind;
   baseUrlInput.value = current.provider.baseUrl;
   modelInput.value = current.provider.model;
@@ -240,6 +396,7 @@ async function init(): Promise<void> {
   categoryBoxes.punctuation.checked = current.categories.punctuation;
   categoryBoxes.style.checked = current.categories.style;
   blocklistArea.value = current.disabledSites.join('\n');
+  renderDictionary();
   onProviderChange(current.provider.kind);
   baseUrlInput.value = current.provider.baseUrl; // onProviderChange may have reset it
 }
