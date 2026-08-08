@@ -25,7 +25,7 @@
     "dictionary-en-ca": "^3.0.0",
     "dictionary-en-gb": "^3.0.0",
     "nspell": "^2.1.5",
-    "pdfjs-dist": "^6.1.200",
+    "pdfjs-dist": "^6.2.108",
     "zod": "^3.24.0"
   },
   "devDependencies": {
