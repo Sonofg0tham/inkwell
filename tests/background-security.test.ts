@@ -28,7 +28,7 @@ function makePort(origin: string, tabId: number, frameId: number): TestPort {
   const disconnectListeners = new Set<() => void>();
   const port = {
     name: CHECK_PORT,
-    sender: { origin, tab: { id: tabId }, frameId },
+    sender: { origin, tab: { id: tabId, url: `${origin}/document` }, frameId },
     onMessage: {
       addListener: (listener: (message: unknown) => void) => messageListeners.add(listener),
     },

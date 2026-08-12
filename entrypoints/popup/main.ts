@@ -8,6 +8,7 @@ import {
   PROVIDER_LABELS,
   type Settings,
 } from '../../lib/settings/schema';
+import { canonicaliseSiteHost } from '../../lib/settings/sites';
 import { loadSettings, saveSettings } from '../../lib/settings/store';
 
 const blottyEl = document.getElementById('blotty')!;
@@ -52,9 +53,10 @@ async function init(): Promise<void> {
   refreshMood(settings.enabled);
 
   const state = await sendTyped({ t: 'getTabState' }).catch(() => null);
-  if (state?.host) {
-    currentHost = state.host;
-    siteHost.textContent = state.host;
+  const activeHost = canonicaliseSiteHost(state?.host ?? '');
+  if (state && activeHost) {
+    currentHost = activeHost;
+    siteHost.textContent = activeHost;
     toggleSite.checked = !state.siteDisabled;
     siteRow.hidden = false;
   }
@@ -107,19 +109,24 @@ toggleSite.addEventListener('change', () => {
   void (async () => {
     if (!currentHost) return;
     const settings = await loadSettings();
-    const disabled = new Set(settings.disabledSites);
-    const cloudAllowed = new Set(settings.cloudAllowedSites);
+    const host = canonicaliseSiteHost(currentHost);
+    const disabled = new Set(
+      settings.disabledSites.map(canonicaliseSiteHost).filter(Boolean),
+    );
+    const cloudAllowed = new Set(
+      settings.cloudAllowedSites.map(canonicaliseSiteHost).filter(Boolean),
+    );
     const usesCloud = providerUsesRemoteEndpoint(
       settings.provider.kind,
       settings.provider.baseUrl,
     );
     if (toggleSite.checked) {
-      disabled.delete(currentHost);
-      if (usesCloud) cloudAllowed.add(currentHost);
+      disabled.delete(host);
+      if (usesCloud) cloudAllowed.add(host);
     } else if (usesCloud) {
-      cloudAllowed.delete(currentHost);
+      cloudAllowed.delete(host);
     } else {
-      disabled.add(currentHost);
+      disabled.add(host);
     }
     settings.disabledSites = [...disabled];
     settings.cloudAllowedSites = [...cloudAllowed];

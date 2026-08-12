@@ -3,11 +3,18 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { setupChromeMock } from './helpers/chrome-mock';
+import {
+  CURRENT_DATA_CONSENT_VERSION,
+  DEFAULT_BASE_URLS,
+  DEFAULT_SETTINGS,
+  type Settings,
+} from '../lib/settings/schema';
 
-async function loadOptions(permissionGranted: boolean) {
+async function loadOptions(permissionGranted: boolean, initialSettings?: Settings) {
   const html = fs.readFileSync(path.resolve('entrypoints/options/index.html'), 'utf8');
   document.documentElement.innerHTML = html;
   const chromeMock = setupChromeMock();
+  if (initialSettings) chromeMock.store.set('settings', initialSettings);
   const request = vi.fn(async () => permissionGranted);
   (chrome as unknown as { permissions: { request: typeof request } }).permissions = { request };
   chrome.runtime.sendMessage = vi.fn(async (message: unknown) =>
@@ -16,7 +23,8 @@ async function loadOptions(permissionGranted: boolean) {
       : { ok: true, models: [] },
   ) as typeof chrome.runtime.sendMessage;
   await import('../entrypoints/options/main');
-  await vi.waitFor(() => expect((document.getElementById('provider') as HTMLSelectElement).value).toBe('ollama'));
+  await vi.waitFor(() => expect((document.getElementById('provider') as HTMLSelectElement).value)
+    .toBe(initialSettings?.provider.kind ?? 'ollama'));
   const consent = document.getElementById('data-consent') as HTMLInputElement;
   consent.checked = true;
   consent.dispatchEvent(new Event('change', { bubbles: true }));
@@ -33,6 +41,57 @@ describe('options endpoint security', () => {
   beforeEach(() => {
     vi.resetModules();
     document.documentElement.innerHTML = '';
+  });
+
+  it.each(['openrouter', 'gemini', 'openai', 'anthropic'])(
+    'locks the official %s server address and directs custom servers to OpenAI-compatible',
+    async (kind) => {
+      await loadOptions(true);
+      const provider = document.getElementById('provider') as HTMLSelectElement;
+      const baseUrl = document.getElementById('base-url') as HTMLInputElement;
+      const hint = document.getElementById('base-url-hint');
+
+      provider.value = kind;
+      provider.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(baseUrl.readOnly).toBe(true);
+      expect(hint?.textContent).toMatch(/official API address is fixed/i);
+      expect(hint?.textContent).toMatch(/LM Studio \/ OpenAI-compatible/i);
+    },
+  );
+
+  it.each(['ollama', 'openai-compat'])(
+    'makes the server address editable again for %s',
+    async (kind) => {
+      await loadOptions(true);
+      const provider = document.getElementById('provider') as HTMLSelectElement;
+      const baseUrl = document.getElementById('base-url') as HTMLInputElement;
+
+      provider.value = 'openai';
+      provider.dispatchEvent(new Event('change', { bubbles: true }));
+      expect(baseUrl.readOnly).toBe(true);
+
+      provider.value = kind;
+      provider.dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(baseUrl.readOnly).toBe(false);
+    },
+  );
+
+  it('normalises a legacy custom cloud address instead of locking it into the read-only field', async () => {
+    await loadOptions(true, {
+      ...DEFAULT_SETTINGS,
+      dataConsentVersion: CURRENT_DATA_CONSENT_VERSION,
+      provider: {
+        kind: 'openai',
+        baseUrl: 'https://legacy-proxy.example/v1',
+        model: 'gpt-test',
+      },
+    });
+
+    const baseUrl = document.getElementById('base-url') as HTMLInputElement;
+    expect(baseUrl.readOnly).toBe(true);
+    expect(baseUrl.value).toBe(DEFAULT_BASE_URLS.openai);
   });
 
   it('blocks plaintext remote model servers before requesting permission or saving', async () => {

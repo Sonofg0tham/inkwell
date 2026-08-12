@@ -27,7 +27,7 @@ Read [PRIVACY.md](PRIVACY.md) for the full data-handling policy and [SECURITY.md
 
 ## Requirements
 
-- Chrome or Edge 102 or newer.
+- Chrome or Edge 119 or newer.
 - Node.js 22.13 or newer to build from source.
 - A supported local model server or a user-supplied cloud API key.
 

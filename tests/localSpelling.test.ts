@@ -166,6 +166,51 @@ describe('deterministic local spelling', () => {
     expect(issues).toEqual([]);
   });
 
+  it('filters model style issues in standard mode while retaining other categories', async () => {
+    const issues = await check('We use a very simple plan.', DEFAULT_SETTINGS, [
+      {
+        type: 'style',
+        original: 'very simple',
+        replacement: 'straightforward',
+        explanation: 'Prefer a more concise phrase.',
+      },
+      {
+        type: 'grammar',
+        original: 'We use',
+        replacement: 'They use',
+        explanation: 'Example grammar correction.',
+      },
+    ]);
+
+    expect(issues).toEqual([
+      expect.objectContaining({ type: 'grammar', original: 'We use', replacement: 'They use' }),
+    ]);
+  });
+
+  it('retains a model style issue in picky mode', async () => {
+    const settings = settingsSchema.parse({ strictness: 'picky' });
+    const issues = await check(
+      'Due to the fact that it was raining, we stayed inside.',
+      settings,
+      [
+        {
+          type: 'style',
+          original: 'Due to the fact that it was raining, we stayed inside.',
+          replacement: 'Because it was raining, we stayed inside.',
+          explanation: 'Wordy and can be simplified.',
+        },
+      ],
+    );
+
+    expect(issues).toEqual([
+      expect.objectContaining({
+        type: 'style',
+        original: 'Due to the fact that it was raining, we stayed inside.',
+        replacement: 'Because it was raining, we stayed inside.',
+      }),
+    ]);
+  });
+
   it('keeps deterministic spelling on overlaps while retaining separate model issues', async () => {
     const issues = await check('I recieve mail.', DEFAULT_SETTINGS, [
       {

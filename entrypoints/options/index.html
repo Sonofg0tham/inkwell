@@ -79,7 +79,14 @@
           </div>
           <div class="field">
             <label for="base-url">Server address</label>
-            <input type="url" id="base-url" class="mono" spellcheck="false" autocomplete="off" />
+            <input
+              type="url"
+              id="base-url"
+              class="mono"
+              spellcheck="false"
+              autocomplete="off"
+              aria-describedby="base-url-hint"
+            />
             <p class="hint" id="base-url-hint"></p>
           </div>
           <div class="field" id="api-key-field">
@@ -181,7 +188,7 @@
         <section class="section">
           <h2 class="section-title">Sites</h2>
           <div class="field">
-            <label for="blocklist">Never check on these sites (one per line)</label>
+            <label for="blocklist">Never check on these sites (one hostname or URL per line)</label>
             <textarea
               id="blocklist"
               class="mono"
@@ -189,6 +196,7 @@
               spellcheck="false"
               placeholder="mail.example.com&#10;secret-diary.example.org"
             ></textarea>
+            <p class="hint">Inkwell stores the hostname only and applies it to every frame on that site.</p>
           </div>
         </section>
 

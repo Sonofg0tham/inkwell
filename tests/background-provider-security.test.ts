@@ -104,7 +104,7 @@ async function setupBackground(permissionGranted: boolean): Promise<Harness> {
   };
 }
 
-function makePort(origin = 'https://writer.example'): {
+function makePort(origin = 'https://writer.example', topUrl = origin): {
   port: chrome.runtime.Port;
   emit(message: unknown): void;
   postMessage: ReturnType<typeof vi.fn>;
@@ -113,7 +113,7 @@ function makePort(origin = 'https://writer.example'): {
   const postMessage = vi.fn();
   const port = {
     name: CHECK_PORT,
-    sender: { origin, tab: { id: 4 }, frameId: 0 },
+    sender: { origin, tab: { id: 4, url: topUrl }, frameId: 0 },
     onMessage: { addListener: vi.fn((next) => { listener = next; }) },
     onDisconnect: { addListener: vi.fn() },
     postMessage,
@@ -135,13 +135,19 @@ describe('background provider security', () => {
     storeMocks.restrictLocalStorageToTrustedContexts.mockResolvedValue(undefined);
     providerMocks.testConnection.mockResolvedValue({ ok: true });
     providerMocks.listModels.mockResolvedValue(['gpt-test']);
-    providerMocks.complete.mockResolvedValue({
-      text: JSON.stringify({
-        issues: [
-          { type: 'spelling', original: 'recieve', replacement: 'receive', explanation: 'Misspelling.' },
-          { type: 'spelling', original: 'tommorow', replacement: 'tomorrow', explanation: 'Misspelling.' },
-        ],
-      }),
+    providerMocks.complete.mockImplementation(async (_config, request) => {
+      const prompt = request.messages.map((message: { content: string }) => message.content).join('\n');
+      const issues = prompt.includes('I will recieve the parcel today. She walk to work every day.')
+        ? [
+            { type: 'spelling', original: 'recieve', replacement: 'receive', explanation: 'Misspelling.' },
+            { type: 'grammar', original: 'She walk', replacement: 'She walks', explanation: 'Agreement.' },
+          ]
+        : prompt.includes('This sentence has an obvious punctuation error! !')
+          ? [{ type: 'punctuation', original: '! !', replacement: '!', explanation: 'Duplicate punctuation.' }]
+          : prompt.includes('Due to the fact that it was raining, we stayed inside.')
+            ? [{ type: 'style', original: 'Due to the fact that', replacement: 'Because', explanation: 'Use a concise conjunction.' }]
+            : [];
+      return { text: JSON.stringify({ issues }) };
     });
   });
 
@@ -260,6 +266,95 @@ describe('background provider security', () => {
     expect(serviceMocks.enqueue).not.toHaveBeenCalled();
   });
 
+  it('blocks a dotted top-level FQDN when the stored hostname is an equivalent spelling', async () => {
+    storeMocks.loadSettings.mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      dataConsentVersion: CURRENT_DATA_CONSENT_VERSION,
+      provider: { kind: 'ollama', baseUrl: 'http://localhost:11434', model: 'test-model' },
+      disabledSites: ['WRITER.EXAMPLE.'],
+    });
+    const runtime = await setupBackground(true);
+    const testPort = makePort(
+      'https://editor-widget.example',
+      'https://Writer.Example./document/1',
+    );
+    runtime.connect(testPort.port);
+    testPort.emit({
+      t: 'check',
+      requestId: 'request-dotted-fqdn',
+      chunkHash: 'hash',
+      text: 'Private text.',
+    });
+
+    await vi.waitFor(() => {
+      expect(testPort.postMessage.mock.calls.length + serviceMocks.enqueue.mock.calls.length).toBe(1);
+    });
+    expect(testPort.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      t: 'error',
+      requestId: 'request-dotted-fqdn',
+      code: 'cors_origin',
+      hint: expect.stringMatching(/disabled.*writer\.example/i),
+    }));
+    expect(serviceMocks.enqueue).not.toHaveBeenCalled();
+  });
+
+  it('returns a canonical popup hostname and applies an equivalent stored block entry', async () => {
+    storeMocks.loadSettings.mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      dataConsentVersion: CURRENT_DATA_CONSENT_VERSION,
+      disabledSites: ['WRITER.EXAMPLE.'],
+    });
+    const runtime = await setupBackground(true);
+    vi.mocked(chrome.tabs.query).mockResolvedValue([
+      { id: 4, url: 'https://Writer.Example./document/1' } as chrome.tabs.Tab,
+    ]);
+
+    const state = await runtime.send({ t: 'getTabState' });
+
+    expect(state).toEqual(expect.objectContaining({
+      host: 'writer.example',
+      siteDisabled: true,
+    }));
+  });
+
+  it('uses the top-level site consent for a cross-origin cloud editor frame', async () => {
+    const runtime = await setupBackground(true);
+    const testPort = makePort(
+      'https://editor-widget.example',
+      'https://writer.example/document/1',
+    );
+    runtime.connect(testPort.port);
+    testPort.emit({ t: 'check', requestId: 'request-frame', chunkHash: 'hash', text: 'Private text.' });
+
+    await vi.waitFor(() => expect(serviceMocks.enqueue).toHaveBeenCalledOnce());
+    expect(testPort.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('disables every child frame when the top-level site is disabled', async () => {
+    storeMocks.loadSettings.mockResolvedValue({
+      ...DEFAULT_SETTINGS,
+      dataConsentVersion: CURRENT_DATA_CONSENT_VERSION,
+      provider: { kind: 'ollama', baseUrl: 'http://localhost:11434', model: 'test-model' },
+      disabledSites: ['writer.example'],
+    });
+    const runtime = await setupBackground(true);
+    const testPort = makePort(
+      'https://editor-widget.example',
+      'https://writer.example/document/1',
+    );
+    runtime.connect(testPort.port);
+    testPort.emit({ t: 'check', requestId: 'request-disabled-frame', chunkHash: 'hash', text: 'Private text.' });
+
+    await vi.waitFor(() => expect(testPort.postMessage).toHaveBeenCalledOnce());
+    expect(testPort.postMessage).toHaveBeenCalledWith(expect.objectContaining({
+      t: 'error',
+      requestId: 'request-disabled-frame',
+      code: 'cors_origin',
+      hint: expect.stringMatching(/disabled.*writer\.example/i),
+    }));
+    expect(serviceMocks.enqueue).not.toHaveBeenCalled();
+  });
+
   it('allows the extension dashboard to check after global consent', async () => {
     const runtime = await setupBackground(true);
     const testPort = makePort('chrome-extension://inkwell-test');
@@ -271,19 +366,17 @@ describe('background provider security', () => {
     expect(testPort.postMessage).not.toHaveBeenCalled();
   });
 
-  it('qualifies the selected model with one structured proofreading completion', async () => {
+  it('qualifies the selected model with the structured proofreading corpus', async () => {
     const runtime = await setupBackground(true);
 
     await expect(runtime.send({ t: 'testConnection' })).resolves.toEqual({ ok: true });
     expect(runtime.contains).toHaveBeenCalledWith({ origins: ['https://api.openai.com/*'] });
     expect(providerMocks.testConnection).toHaveBeenCalledOnce();
-    expect(providerMocks.complete).toHaveBeenCalledOnce();
-    expect(providerMocks.complete.mock.calls[0]?.[0]).toEqual(expect.objectContaining({
-      apiKey: 'top-secret',
-    }));
-    expect(providerMocks.complete.mock.calls[0]?.[1]).toEqual(expect.objectContaining({
-      jsonSchema: expect.any(Object),
-    }));
+    expect(providerMocks.complete).toHaveBeenCalledTimes(4);
+    for (const [config, request] of providerMocks.complete.mock.calls) {
+      expect(config).toEqual(expect.objectContaining({ apiKey: 'top-secret' }));
+      expect(request).toEqual(expect.objectContaining({ jsonSchema: expect.any(Object) }));
+    }
   });
 
   it('returns an actionable failure when a reachable model cannot proofread with structured JSON', async () => {

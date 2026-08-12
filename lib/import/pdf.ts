@@ -9,13 +9,13 @@ export { PdfError } from './pdfError';
 
 const MAX_PAGES = 200;
 
-let pdfjsPromise: Promise<typeof import('pdfjs-dist')> | null = null;
+let pdfjsPromise: Promise<typeof import('pdfjs-dist/legacy/build/pdf.mjs')> | null = null;
 
 async function loadPdfjs() {
   if (!pdfjsPromise) {
     pdfjsPromise = (async () => {
-      const pdfjs = await import('pdfjs-dist');
-      const workerUrl = (await import('pdfjs-dist/build/pdf.worker.min.mjs?url')).default;
+      const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+      const workerUrl = (await import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')).default;
       pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
       return pdfjs;
     })();

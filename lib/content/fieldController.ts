@@ -5,6 +5,7 @@ import { fnvHash } from '../checker/hash';
 import type { FrameCheckState, IssueDto, PortResponse } from '../messaging/protocol';
 import type { Settings } from '../settings/schema';
 import { applyFix } from './applyFix';
+import { resolveEditable } from './editablePolicy';
 import { getOverlayHost } from './overlay/host';
 import { measureTextControl } from './overlay/mirror';
 import { SuggestionCard } from './overlay/card';
@@ -167,6 +168,7 @@ export class FieldController {
     }
     this.underlines.clear();
     this.card.hide();
+    this.status.clear();
     this.userEdited = false;
     this.report(0);
     this.env.reportStatus?.({ phase: 'idle', count: 0 });
@@ -249,7 +251,7 @@ export class FieldController {
   }
 
   private requestChecks(): void {
-    if (!this.active) return;
+    if (!this.active || resolveEditable(this.target.el)?.el !== this.target.el) return;
     let eligible = this.chunks;
     if (this.lastTextLength > LARGE_DOC_CHARS) {
       const caret = this.caretOffset();

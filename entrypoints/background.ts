@@ -26,6 +26,7 @@ import {
   restrictLocalStorageToTrustedContexts,
   watchSettings,
 } from '../lib/settings/store';
+import { canonicaliseSiteHost, siteHostListIncludes } from '../lib/settings/sites';
 
 const TAB_STATES_KEY = 'tabCheckStates';
 
@@ -129,10 +130,23 @@ function senderOrigin(sender: chrome.runtime.MessageSender | undefined): string 
   return undefined;
 }
 
+function senderTopLevelHost(sender: chrome.runtime.MessageSender | undefined): string | null {
+  try {
+    if (!sender?.tab?.url) return null;
+    const url = new URL(sender.tab.url);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    return canonicaliseSiteHost(url.hostname) || null;
+  } catch {
+    return null;
+  }
+}
+
 interface ProviderAccessContext {
   /** Port callers must prove which page is asking to process its text. */
   enforceSiteBoundary?: boolean;
   clientOrigin?: string;
+  /** Site policy follows the top-level tab shown in the popup, not a child frame. */
+  siteHost?: string | null;
 }
 
 async function loadAuthorisedProvider(context: ProviderAccessContext = {}) {
@@ -165,8 +179,18 @@ async function loadAuthorisedProvider(context: ProviderAccessContext = {}) {
     }
 
     if (origin.protocol === 'http:' || origin.protocol === 'https:') {
-      const host = origin.hostname.toLowerCase();
-      if (settings.disabledSites.includes(host)) {
+      const host = canonicaliseSiteHost(context.siteHost ?? '');
+      if (!host) {
+        return {
+          ok: false as const,
+          result: {
+            ok: false as const,
+            code: 'cors_origin' as const,
+            hint: 'Inkwell could not verify the top-level site, so no text was processed.',
+          },
+        };
+      }
+      if (siteHostListIncludes(settings.disabledSites, host)) {
         return {
           ok: false as const,
           result: {
@@ -178,7 +202,7 @@ async function loadAuthorisedProvider(context: ProviderAccessContext = {}) {
       }
       if (
         providerUsesRemoteEndpoint(settings.provider.kind, settings.provider.baseUrl) &&
-        !settings.cloudAllowedSites.includes(host)
+        !siteHostListIncludes(settings.cloudAllowedSites, host)
       ) {
         return {
           ok: false as const,
@@ -274,6 +298,7 @@ export default defineBackground(() => {
       id: `${port.sender?.tab?.id ?? 'extension'}:${port.sender?.frameId ?? 0}:${++clientSequence}`,
       origin: senderOrigin(port.sender),
     };
+    const siteHost = senderTopLevelHost(port.sender);
     if (port.sender?.tab?.id != null) {
       void clearFrameState(port.sender.tab.id, port.sender.frameId ?? 0);
     }
@@ -287,6 +312,7 @@ export default defineBackground(() => {
           const access = await loadAuthorisedProvider({
             enforceSiteBoundary: true,
             clientOrigin: client.origin,
+            siteHost,
           });
           // Permission checks are asynchronous, so cancellation must be checked again.
           if (!requestIds.has(msg.requestId)) return;
@@ -369,7 +395,7 @@ export default defineBackground(() => {
       const settings = await loadSettings();
       let host: string | null = null;
       try {
-        host = tab?.url ? new URL(tab.url).hostname || null : null;
+        host = tab?.url ? canonicaliseSiteHost(new URL(tab.url).hostname) || null : null;
       } catch {
         host = null;
       }
@@ -381,16 +407,19 @@ export default defineBackground(() => {
         host,
         siteDisabled:
           host !== null &&
-          (settings.disabledSites.includes(host) ||
+          (siteHostListIncludes(settings.disabledSites, host) ||
             (providerUsesRemoteEndpoint(settings.provider.kind, settings.provider.baseUrl) &&
-              !settings.cloudAllowedSites.includes(host))),
+              !siteHostListIncludes(settings.cloudAllowedSites, host))),
         ...summary,
       };
     },
 
-    getContentSettings: async () => {
+    getContentSettings: async (_req, sender) => {
       await storageBoundaryReady;
-      return loadSettings();
+      return {
+        settings: await loadSettings(),
+        siteHost: senderTopLevelHost(sender),
+      };
     },
 
     addPersonalDictionaryWord: async (req) => {

@@ -17,6 +17,6 @@ describe('manifest provider permissions', () => {
 
   it('requires the Chromium storage APIs used to isolate secrets and frame state', () => {
     const manifest = config.manifest as Record<string, unknown>;
-    expect(manifest.minimum_chrome_version).toBe('102');
+    expect(manifest.minimum_chrome_version).toBe('119');
   });
 });

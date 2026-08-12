@@ -31,8 +31,9 @@ const OVERLAY_CSS = `
   position: fixed;
   pointer-events: auto;
   box-sizing: border-box;
-  max-width: 320px;
-  min-width: 220px;
+  width: max-content;
+  max-width: min(320px, calc(100vw - 16px));
+  min-width: min(220px, calc(100vw - 16px));
   background: #fffdf8;
   color: #23273a;
   border: 1px solid #e6dfd0;

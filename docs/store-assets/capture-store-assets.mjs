@@ -46,9 +46,9 @@ async function startFixtureServer() {
       if (requestUrl.pathname === '/api/chat') {
         const raw = await readBody(request);
         const parsed = JSON.parse(raw);
-        const prompt = Array.isArray(parsed.messages)
-          ? parsed.messages.map((message) => message?.content ?? '').join('\n')
-          : '';
+        const messages = Array.isArray(parsed.messages) ? parsed.messages : [];
+        const prompt = messages.at(-1)?.content ?? '';
+        const fullPrompt = messages.map((message) => message?.content ?? '').join('\n');
         const issues = [];
         if (prompt.includes('recieve')) {
           issues.push({
@@ -64,6 +64,33 @@ async function startFixtureServer() {
             original: 'tommorow',
             replacement: 'tomorrow',
             explanation: 'Correct the misspelling.',
+          });
+        }
+        if (prompt.includes('She walk to work every day.')) {
+          issues.push({
+            type: 'grammar',
+            original: 'She walk',
+            replacement: 'She walks',
+            explanation: 'Make the subject and verb agree.',
+          });
+        }
+        if (prompt.includes('This sentence has an obvious punctuation error! !')) {
+          issues.push({
+            type: 'punctuation',
+            original: '! !',
+            replacement: '!',
+            explanation: 'Remove the duplicate punctuation mark.',
+          });
+        }
+        if (
+          prompt.includes('Due to the fact that it was raining, we stayed inside.') &&
+          fullPrompt.includes('Also report wordiness')
+        ) {
+          issues.push({
+            type: 'style',
+            original: 'Due to the fact that it was raining, we stayed inside.',
+            replacement: 'Because it was raining, we stayed inside.',
+            explanation: 'Use a more concise phrase.',
           });
         }
         if (prompt.includes('Your welcome')) {
@@ -160,10 +187,15 @@ async function captureProductScreenshots() {
     await options.locator('#model').fill(fixtureModel);
     await options.locator('#data-consent').check();
     await options.getByRole('button', { name: 'Save & test' }).click();
-    await options.locator('#save-result').filter({ hasText: 'Saved and connected' }).waitFor({
-      state: 'visible',
-      timeout: 20_000,
-    });
+    try {
+      await options.locator('#save-result').filter({ hasText: 'Saved and connected' }).waitFor({
+        state: 'visible',
+        timeout: 20_000,
+      });
+    } catch (error) {
+      const resultText = (await options.locator('#save-result').textContent())?.trim() || 'No result text';
+      throw new Error(`Store capture model setup failed: ${resultText}`, { cause: error });
+    }
     await options.locator('input[name="dialect"][value="en-AU"]').check();
     await options.locator('#dictionary-word').fill('Colourise');
     await options.locator('#dictionary-add').click();

@@ -65,13 +65,24 @@ export function measureTextControl(
     m.style.setProperty(prop, computed.getPropertyValue(prop));
   }
   const targetRect = el.getBoundingClientRect();
+  const borderTop = parseFloat(computed.borderTopWidth) || 0;
+  const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
+  const borderRight = parseFloat(computed.borderRightWidth) || 0;
+  const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
+  const paddingLeft = parseFloat(computed.paddingLeft) || 0;
+  const paddingRight = parseFloat(computed.paddingRight) || 0;
+  const mirrorWidth =
+    el.clientWidth > 0
+      ? computed.boxSizing === 'border-box'
+        ? el.clientWidth + borderLeft + borderRight
+        : Math.max(0, el.clientWidth - paddingLeft - paddingRight)
+      : targetRect.width;
+  m.style.width = `${mirrorWidth}px`;
   if (el instanceof HTMLTextAreaElement) {
     m.style.whiteSpace = 'pre-wrap';
     m.style.overflowWrap = computed.getPropertyValue('overflow-wrap') || 'break-word';
-    m.style.width = `${targetRect.width}px`;
   } else {
     m.style.whiteSpace = 'pre';
-    m.style.width = 'auto';
   }
 
   // Build content: alternating text nodes and marker spans, one pass for all
@@ -102,10 +113,6 @@ export function measureTextControl(
 
   // Visible content box (inside borders) — rects outside it are clipped away,
   // which makes underlines vanish correctly when the control scrolls internally.
-  const borderTop = parseFloat(computed.borderTopWidth) || 0;
-  const borderLeft = parseFloat(computed.borderLeftWidth) || 0;
-  const borderRight = parseFloat(computed.borderRightWidth) || 0;
-  const borderBottom = parseFloat(computed.borderBottomWidth) || 0;
   const contentBox: Rect = {
     left: targetRect.left + borderLeft,
     top: targetRect.top + borderTop,

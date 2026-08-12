@@ -9,14 +9,17 @@ import {
   DEFAULT_SETTINGS,
   type Settings,
 } from '../lib/settings/schema';
+import { siteHostListIncludes } from '../lib/settings/sites';
 
 export default defineContentScript({
   matches: ['<all_urls>'],
   allFrames: true,
   matchAboutBlank: true,
+  matchOriginAsFallback: true,
   runAt: 'document_idle',
   main() {
     let settings: Settings = DEFAULT_SETTINGS;
+    let siteHost: string | null = null;
     let watcher: WatcherHandle | null = null;
     let stateSequence = 0;
     const port = new PortClient();
@@ -45,7 +48,7 @@ export default defineContentScript({
     };
 
     const evaluate = (): void => {
-      const host = location.hostname;
+      const host = siteHost;
       const usesCloud = providerUsesRemoteEndpoint(
         settings.provider.kind,
         settings.provider.baseUrl,
@@ -53,8 +56,9 @@ export default defineContentScript({
       const on =
         settings.enabled &&
         settings.dataConsentVersion >= CURRENT_DATA_CONSENT_VERSION &&
-        !settings.disabledSites.includes(host) &&
-        (!usesCloud || settings.cloudAllowedSites.includes(host));
+        host !== null &&
+        !siteHostListIncludes(settings.disabledSites, host) &&
+        (!usesCloud || siteHostListIncludes(settings.cloudAllowedSites, host));
       if (on && !watcher) {
         watcher = startWatcher(env);
       } else if (!on && watcher) {
@@ -72,8 +76,9 @@ export default defineContentScript({
     });
 
     void sendTyped({ t: 'getContentSettings' })
-      .then((nextSettings) => {
-        settings = nextSettings;
+      .then((response) => {
+        settings = response.settings;
+        siteHost = response.siteHost;
         evaluate();
       })
       .catch(() => {

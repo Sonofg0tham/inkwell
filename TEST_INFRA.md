@@ -16,7 +16,7 @@ npm.cmd test
 
 Vitest covers the checker pipeline, provider validation, settings and storage boundaries, editable-field handling, overlays, popup behaviour, document import and export, and dashboard workflows. Browser APIs are supplied by `tests/helpers/chrome-mock.ts`; DOM-heavy tests opt into Happy DOM.
 
-These tests are deterministic and do not require Ollama or a cloud API key. Tests which probe a real local model are explicitly gated and skip when their opt-in environment variable is absent.
+The suite does not require Ollama or a cloud API key. Real Ollama acceptance tests run when the local server is reachable and otherwise skip; the wider diagnostic probe remains opt-in through its environment variable.
 
 The test command caps Vitest at four workers. Dictionary initialisation is CPU-heavy, and allowing every file to start a worker at once made short asynchronous assertions unreliable on high-core machines and CI runners.
 
@@ -38,7 +38,7 @@ npm.cmd run build
 npm.cmd run test:e2e
 ```
 
-The smoke test launches a fresh, persistent Chromium context with `.output/chrome-mv3` installed. It checks the consent gate, configures a private loopback model fixture, and opens the workspace. Trusted keyboard input then exercises a single-line input, textarea, contenteditable surface and same-origin embedded editor. It verifies suggestions and badge counts in all four, and applies fixes by keyboard in the three top-level editors.
+The smoke test launches a fresh, persistent Chromium context with `.output/chrome-mv3` installed. It checks the consent gate, configures a private loopback model fixture, and opens the workspace. Trusted keyboard input then exercises a single-line input, textarea, flat and nested contenteditable surfaces, a controlled textarea, a dynamically inserted field, an open-shadow-root field, a same-origin `srcdoc` frame and a cross-origin frame. It applies fixes by keyboard, checks that nested formatting survives, and proves that disabling the top-level site also disables its cross-origin child editor.
 
 No external service or user-installed model is contacted. The loopback fixture behaves like Ollama and returns deterministic test data, while the opt-in real-model suites cover actual model communication separately.
 

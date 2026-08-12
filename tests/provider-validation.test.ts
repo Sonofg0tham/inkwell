@@ -57,6 +57,15 @@ describe('provider endpoint validation', () => {
     expect(endpoint.requiresPermission).toBe(true);
   });
 
+  it.each([
+    ['openai', 'https://attacker.example/v1'],
+    ['anthropic', 'https://attacker.example'],
+    ['gemini', 'https://attacker.example/openai'],
+    ['openrouter', 'https://attacker.example/api'],
+  ] as const)('locks the %s provider to its official endpoint', (kind, baseUrl) => {
+    expect(() => validateProviderEndpoint(kind, baseUrl)).toThrow(/official endpoint|OpenAI-compatible/i);
+  });
+
   it('rejects unsupported schemes and embedded credentials', () => {
     expect(() => validateProviderEndpoint('ollama', 'file:///tmp/model')).toThrow(/HTTP or HTTPS/i);
     expect(() => validateProviderEndpoint('openai-compat', 'https://user:pass@example.test')).toThrow(/credentials/i);

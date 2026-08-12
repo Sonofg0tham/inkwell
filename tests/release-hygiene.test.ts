@@ -15,4 +15,11 @@ describe('release hygiene', () => {
     expect(importer).not.toMatch(/from ['"]\.\/pdf['"]/);
     expect(importer).toContain("await import('./pdf')");
   });
+
+  it('uses the PDF.js legacy bundle required by the advertised browser floor', () => {
+    const pdfImporter = fs.readFileSync(path.resolve(__dirname, '../lib/import/pdf.ts'), 'utf8');
+    expect(pdfImporter).toContain("import('pdfjs-dist/legacy/build/pdf.mjs')");
+    expect(pdfImporter).toContain("import('pdfjs-dist/legacy/build/pdf.worker.min.mjs?url')");
+    expect(pdfImporter).not.toContain("import('pdfjs-dist/build/pdf.worker.min.mjs?url')");
+  });
 });

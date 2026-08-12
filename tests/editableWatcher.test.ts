@@ -138,6 +138,48 @@ describe('editable privacy policy', () => {
     expect(activate).not.toHaveBeenCalled();
   });
 
+  it('honours a nearer spellcheck=true override on the editor', () => {
+    const activate = vi.spyOn(FieldController.prototype, 'activate');
+    const wrapper = document.createElement('div');
+    wrapper.setAttribute('spellcheck', 'false');
+    const editor = document.createElement('div');
+    editor.contentEditable = 'true';
+    editor.setAttribute('spellcheck', 'true');
+    wrapper.append(editor);
+    document.body.append(wrapper);
+    start();
+
+    dispatchFocus('focusin', editor, editor);
+
+    expect(activate).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    ['label', 'API key'],
+    ['aria-labelledby', 'Username'],
+  ])('ignores a field identified as sensitive by %s text', (source, labelText) => {
+    const activate = vi.spyOn(FieldController.prototype, 'activate');
+    const field = document.createElement('textarea');
+    field.id = 'sensitive-field';
+    if (source === 'label') {
+      const label = document.createElement('label');
+      label.htmlFor = field.id;
+      label.textContent = labelText;
+      document.body.append(label, field);
+    } else {
+      const label = document.createElement('span');
+      label.id = 'sensitive-label';
+      label.textContent = labelText;
+      field.setAttribute('aria-labelledby', label.id);
+      document.body.append(label, field);
+    }
+    start();
+
+    dispatchFocus('focusin', field, field);
+
+    expect(activate).not.toHaveBeenCalled();
+  });
+
   it.each(['monaco-editor', 'cm-editor', 'CodeMirror', 'ace_editor'])(
     'ignores editable controls inside the %s code editor',
     (className) => {
@@ -193,6 +235,19 @@ describe('focus lifecycle', () => {
     textarea.setAttribute('spellcheck', 'false');
 
     dispatchFocus('focusout', textarea, textarea, document.body);
+
+    expect(deactivate).toHaveBeenCalledOnce();
+  });
+
+  it('deactivates before input when an SPA turns the focused field sensitive', () => {
+    const deactivate = vi.spyOn(FieldController.prototype, 'deactivate');
+    const textarea = document.createElement('textarea');
+    document.body.append(textarea);
+    start();
+    dispatchFocus('focusin', textarea, textarea);
+    textarea.setAttribute('autocomplete', 'username');
+
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true, composed: true }));
 
     expect(deactivate).toHaveBeenCalledOnce();
   });

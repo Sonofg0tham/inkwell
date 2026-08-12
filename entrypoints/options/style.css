@@ -251,6 +251,13 @@ textarea.mono {
   font-family: var(--ink-font-mono);
 }
 
+input[type='url'][readonly] {
+  color: var(--ink-muted);
+  background: var(--ink-bg-sunken);
+  cursor: default;
+  caret-color: transparent;
+}
+
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible {
