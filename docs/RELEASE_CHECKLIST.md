@@ -17,7 +17,7 @@ Use this checklist before handing an Inkwell build to another person or uploadin
 - Confirm the first-run popup and options page keep checking off until the privacy checkpoint is accepted.
 - Load `.output/chrome-mv3` manually in Chrome or Edge and test one ordinary website, one contenteditable editor, and the document workspace.
 - Confirm that the popup, options page, badge count, accept, dismiss, undo, site disable, and provider error states behave as expected.
-- Confirm the generated manifest still declares Chrome 102 as the minimum supported version. Test on Chrome 102 before lowering or relying on that claim.
+- Confirm the generated manifest declares Chrome 119 as the minimum supported version and includes origin-fallback injection for related `data:`, `blob:` and `filesystem:` frames.
 - Run `npm.cmd run build:edge` and check that `.output/edge-mv3/manifest.json` exists.
 
 ## Local-model gates

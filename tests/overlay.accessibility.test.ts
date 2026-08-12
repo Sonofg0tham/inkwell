@@ -56,6 +56,7 @@ describe('in-page overlay accessibility', () => {
 
   afterEach(() => {
     destroyOverlayHost();
+    vi.restoreAllMocks();
   });
 
   it('keeps a usable internal reference while hiding the shadow root from page scripts', () => {
@@ -303,5 +304,43 @@ describe('in-page overlay accessibility', () => {
 
     expect(host.cardLayer.querySelector('.ink-card')).toBeNull();
     expect(host.root.activeElement).toBe(trigger);
+  });
+
+  it('keeps the card inside a narrow iframe viewport', () => {
+    vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(180);
+    vi.spyOn(window, 'innerHeight', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      if (this.classList.contains('ink-card')) {
+        return {
+          x: 0,
+          y: 0,
+          left: 0,
+          top: 0,
+          right: 220,
+          bottom: 120,
+          width: 220,
+          height: 120,
+          toJSON: () => ({}),
+        };
+      }
+      return {
+        x: 0,
+        y: 0,
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+        width: 0,
+        height: 0,
+        toJSON: () => ({}),
+      };
+    });
+    const host = getOverlayHost();
+    const card = new SuggestionCard(host, { onApply: vi.fn(), onDismiss: vi.fn() });
+
+    card.show(spellingIssue(), ANCHOR);
+
+    const dialog = host.cardLayer.querySelector<HTMLElement>('.ink-card')!;
+    expect(Number.parseFloat(dialog.style.left)).toBeGreaterThanOrEqual(8);
   });
 });

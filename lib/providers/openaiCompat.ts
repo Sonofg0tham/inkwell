@@ -1,5 +1,6 @@
 import { toStrictJsonSchema } from '../checker/schema';
 import {
+  discardResponse,
   ensureOk,
   fetchWithTimeout,
   ProviderError,
@@ -162,6 +163,7 @@ export const openrouterProvider: Provider = {
         OPENROUTER_HINT,
       );
       await ensureOk(res);
+      await discardResponse(res);
       return { ok: true };
     } catch (err) {
       if (err instanceof ProviderError) return { ok: false, code: err.code, hint: err.message };

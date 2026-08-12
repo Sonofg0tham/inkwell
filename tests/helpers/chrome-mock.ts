@@ -116,6 +116,7 @@ export function setupChromeMock() {
       connect: vi.fn(({ name }: { name: string }) => {
         const messageListeners = new Set<(msg: any) => void>();
         const disconnectListeners = new Set<() => void>();
+        let singleRateLimitSent = false;
 
         const mockPort = {
           name,
@@ -141,6 +142,20 @@ export function setupChromeMock() {
                       issues: [],
                       dropped: 2,
                       model: 'mock-model',
+                    })
+                  );
+                }, 5);
+                return;
+              }
+              if (msg.text.includes('TRIGGER_SINGLE_RATE_LIMIT') && !singleRateLimitSent) {
+                singleRateLimitSent = true;
+                setTimeout(() => {
+                  messageListeners.forEach((cb) =>
+                    cb({
+                      t: 'error',
+                      requestId: msg.requestId,
+                      code: 'rate_limit',
+                      hint: 'Rate limited once for the continuation regression.',
                     })
                   );
                 }, 5);
@@ -215,15 +230,26 @@ export function setupChromeMock() {
                     explanation: 'Did you mean "There"?',
                   });
                 }
-                if (msg.text.includes('beachh')) {
+                for (const match of msg.text.matchAll(/beachh/g)) {
                   issues.push({
-                    id: 'issue_2',
+                    id: `issue_2_${match.index}`,
                     type: 'spelling' as const,
-                    start: msg.text.indexOf('beachh'),
-                    end: msg.text.indexOf('beachh') + 6,
+                    start: match.index,
+                    end: match.index + 6,
                     original: 'beachh',
                     replacement: 'beach',
                     explanation: 'Spelling correction: beach',
+                  });
+                }
+                for (const match of msg.text.matchAll(/[ \t]+[,.;:!?]/g)) {
+                  issues.push({
+                    id: `issue_punctuation_${match.index}`,
+                    type: 'punctuation' as const,
+                    start: match.index,
+                    end: match.index + match[0].length,
+                    original: match[0],
+                    replacement: match[0].trimStart(),
+                    explanation: 'Remove the space before the punctuation mark.',
                   });
                 }
                 messageListeners.forEach((cb) =>

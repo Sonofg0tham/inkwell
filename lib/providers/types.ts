@@ -44,6 +44,159 @@ export class ProviderError extends Error {
 
 const REQUEST_TIMEOUT_MS = 60_000;
 
+function createRequestSignal(callerSignal?: AbortSignal): {
+  signal: AbortSignal;
+  didTimeOut: () => boolean;
+  abort: () => void;
+  dispose: () => void;
+} {
+  const controller = new AbortController();
+  let timedOut = false;
+  let disposed = false;
+  const abortFromCaller = (): void => controller.abort();
+
+  if (callerSignal?.aborted) {
+    controller.abort();
+  } else {
+    callerSignal?.addEventListener('abort', abortFromCaller, { once: true });
+  }
+
+  const timeout = setTimeout(() => {
+    if (controller.signal.aborted) {
+      callerSignal?.removeEventListener('abort', abortFromCaller);
+      return;
+    }
+    timedOut = true;
+    controller.abort();
+    callerSignal?.removeEventListener('abort', abortFromCaller);
+  }, REQUEST_TIMEOUT_MS);
+
+  return {
+    signal: controller.signal,
+    didTimeOut: () => timedOut,
+    abort: () => controller.abort(),
+    dispose: () => {
+      if (disposed) return;
+      disposed = true;
+      clearTimeout(timeout);
+      callerSignal?.removeEventListener('abort', abortFromCaller);
+    },
+  };
+}
+
+type RequestScope = ReturnType<typeof createRequestSignal>;
+const BODY_READ_METHODS = new Set(['arrayBuffer', 'blob', 'bytes', 'formData', 'json', 'text']);
+interface ResponseCleanup {
+  discard: () => Promise<void>;
+}
+const responseCleanups = new WeakMap<Response, ResponseCleanup>();
+
+async function cancelResponseBody(
+  response: Response,
+  request: RequestScope,
+): Promise<void> {
+  const body = response.body;
+  if (!body) return;
+
+  let rejectOnAbort = (): void => undefined;
+  const abortError = new Promise<never>((_resolve, reject) => {
+    rejectOnAbort = (): void => {
+      reject(new DOMException('The operation was aborted.', 'AbortError'));
+    };
+    if (request.signal.aborted) {
+      rejectOnAbort();
+      return;
+    }
+    request.signal.addEventListener('abort', rejectOnAbort, { once: true });
+  });
+  // A transport can fail while its error body is still streaming. Start
+  // cancellation before a compatibility retry, but keep the request deadline
+  // able to break a cancellation promise that never settles.
+  const cancellation = Promise.resolve().then(() => body.cancel());
+  try {
+    try {
+      await Promise.race([cancellation, abortError]);
+    } catch (error) {
+      if (request.signal.aborted) throw error;
+      // Some stream implementations reject cancel() without closing their
+      // transport. Abort the original fetch before any compatibility retry.
+      request.abort();
+    }
+  } finally {
+    request.signal.removeEventListener('abort', rejectOnAbort);
+  }
+}
+
+function requestError(
+  err: unknown,
+  request: RequestScope,
+  callerSignal: AbortSignal | undefined,
+  networkHint: string,
+): Error {
+  if (request.didTimeOut()) {
+    return new ProviderError('network', 'The request timed out after 60 seconds.');
+  }
+  if (err instanceof DOMException && err.name === 'AbortError') return err;
+  if (callerSignal?.aborted) {
+    return new DOMException('The operation was aborted.', 'AbortError');
+  }
+  return err instanceof Error ? err : new ProviderError('network', networkHint);
+}
+
+function keepRequestAliveThroughBody(
+  response: Response,
+  request: RequestScope,
+  callerSignal: AbortSignal | undefined,
+  networkHint: string,
+): Response {
+  const release = (): void => {
+    request.dispose();
+    responseCleanups.delete(managed);
+  };
+  const discard = async (): Promise<void> => {
+    try {
+      await cancelResponseBody(response, request);
+    } catch (err) {
+      throw requestError(err, request, callerSignal, networkHint);
+    } finally {
+      release();
+    }
+  };
+  const managed = new Proxy(response, {
+    get(target, property) {
+      const value = Reflect.get(target, property, target);
+      if (typeof value !== 'function') return value;
+      const bound = value.bind(target) as (...args: unknown[]) => unknown;
+      if (typeof property !== 'string' || !BODY_READ_METHODS.has(property)) return bound;
+      return async (...args: unknown[]) => {
+        try {
+          return await bound(...args);
+        } catch (err) {
+          throw requestError(err, request, callerSignal, networkHint);
+        } finally {
+          release();
+        }
+      };
+    },
+  });
+  responseCleanups.set(managed, { discard });
+  return managed;
+}
+
+/** Releases a successful response that the caller deliberately does not read. */
+export async function discardResponse(response: Response): Promise<void> {
+  const cleanup = responseCleanups.get(response);
+  if (cleanup) {
+    await cleanup.discard();
+    return;
+  }
+  try {
+    await response.body?.cancel();
+  } catch {
+    // An unmanaged, already consumed or closed response needs no request cleanup.
+  }
+}
+
 /**
  * fetch wrapper: combines the caller's signal with a 60 s timeout and maps
  * failures to ProviderError with UI-safe messages.
@@ -54,15 +207,21 @@ export async function fetchWithTimeout(
   signal?: AbortSignal,
   networkHint = 'Could not reach the server. Is it running?',
 ): Promise<Response> {
-  const signals = [AbortSignal.timeout(REQUEST_TIMEOUT_MS)];
-  if (signal) signals.push(signal);
+  // Combine the caller cancellation and timeout explicitly so the behaviour
+  // stays consistent and testable across every supported Chromium build.
+  const request = createRequestSignal(signal);
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.any(signals) });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') throw err;
-    if (err instanceof DOMException && err.name === 'TimeoutError') {
-      throw new ProviderError('network', 'The request timed out after 60 seconds.');
+    const response = await fetch(url, { ...init, signal: request.signal });
+    if (!response.ok) {
+      await cancelResponseBody(response, request);
+      request.dispose();
+      return response;
     }
+    return keepRequestAliveThroughBody(response, request, signal, networkHint);
+  } catch (err) {
+    const mapped = requestError(err, request, signal, networkHint);
+    request.dispose();
+    if (mapped instanceof ProviderError || mapped instanceof DOMException) throw mapped;
     throw new ProviderError('network', networkHint);
   }
 }

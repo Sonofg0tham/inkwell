@@ -14,6 +14,7 @@ import {
   type ProviderKind,
   type Settings,
 } from '../../lib/settings/schema';
+import { parseSiteHostList } from '../../lib/settings/sites';
 import {
   addPersonalDictionaryWord,
   clearPersonalDictionary,
@@ -159,7 +160,9 @@ async function refreshKeyUi(): Promise<void> {
 function onProviderChange(previousKind: ProviderKind): void {
   const kind = selectedKind();
   const value = baseUrlInput.value.trim().replace(/\/+$/, '');
-  if (CLOUD_KINDS.includes(kind)) {
+  const hasFixedEndpoint = CLOUD_KINDS.includes(kind);
+  baseUrlInput.readOnly = hasFixedEndpoint;
+  if (hasFixedEndpoint) {
     // Cloud providers have one official endpoint — never carry over a local
     // or custom address when switching to them.
     baseUrlInput.value = DEFAULT_BASE_URLS[kind];
@@ -176,8 +179,8 @@ function onProviderChange(previousKind: ProviderKind): void {
     kind === 'ollama'
       ? `Default Ollama address. Allow only this extension origin: OLLAMA_ORIGINS=${extensionOrigin()}. Do not use a wildcard.`
       : kind === 'openai-compat'
-        ? 'Default LM Studio address. Works with any OpenAI-compatible server — enable CORS in LM Studio.'
-        : 'Official API address — you normally won’t change this.';
+        ? 'Default LM Studio address. Edit it for any OpenAI-compatible custom server. Enable CORS in LM Studio.'
+        : 'Official API address is fixed for this provider. To use a custom server, choose LM Studio / OpenAI-compatible.';
   modelList.replaceChildren();
   modelsHint.hidden = true;
   void refreshKeyUi();
@@ -193,6 +196,16 @@ async function persist(): Promise<boolean> {
   if (!alreadyAccepted && !consentCheckbox.checked) {
     showResult('error', 'Review the privacy disclosure and tick the consent box before saving.');
     consentCheckbox.focus();
+    return false;
+  }
+
+  const blocklist = parseSiteHostList(blocklistArea.value);
+  if (blocklist.invalid.length > 0) {
+    showResult(
+      'error',
+      `Use a hostname or web URL for each blocked site. Check: ${blocklist.invalid.slice(0, 3).join(', ')}`,
+    );
+    blocklistArea.focus();
     return false;
   }
 
@@ -240,10 +253,7 @@ async function persist(): Promise<boolean> {
       punctuation: categoryBoxes.punctuation.checked,
       style: categoryBoxes.style.checked,
     },
-    disabledSites: blocklistArea.value
-      .split('\n')
-      .map((line) => line.trim().toLowerCase())
-      .filter((line) => line.length > 0),
+    disabledSites: blocklist.hosts,
   };
 
   await saveSettings(settings);
@@ -398,7 +408,6 @@ async function init(): Promise<void> {
   blocklistArea.value = current.disabledSites.join('\n');
   renderDictionary();
   onProviderChange(current.provider.kind);
-  baseUrlInput.value = current.provider.baseUrl; // onProviderChange may have reset it
 }
 
 void init();

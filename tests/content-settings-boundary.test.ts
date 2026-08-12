@@ -33,7 +33,10 @@ describe('content-script settings boundary', () => {
       settingsChanged: mocks.settingsChanged,
     });
     mocks.loadSettings.mockResolvedValue(DEFAULT_SETTINGS);
-    mocks.sendTyped.mockResolvedValue({ ...DEFAULT_SETTINGS, dataConsentVersion: 1 });
+    mocks.sendTyped.mockResolvedValue({
+      settings: { ...DEFAULT_SETTINGS, dataConsentVersion: 1 },
+      siteHost: 'top.example',
+    });
   });
 
   it('loads sanitised settings from the background and refreshes active controllers on broadcasts', async () => {
@@ -57,7 +60,11 @@ describe('content-script settings boundary', () => {
     } as unknown as typeof chrome;
 
     await import('../entrypoints/content');
-    expect(definition).toMatchObject({ allFrames: true, matchAboutBlank: true });
+    expect(definition).toMatchObject({
+      allFrames: true,
+      matchAboutBlank: true,
+      matchOriginAsFallback: true,
+    });
     main?.();
     await vi.waitFor(() => expect(mocks.startWatcher).toHaveBeenCalledTimes(1));
 
@@ -98,7 +105,7 @@ describe('content-script settings boundary', () => {
         ...DEFAULT_SETTINGS,
         dataConsentVersion: 1,
         provider: { ...DEFAULT_SETTINGS.provider, kind: 'openai' },
-        cloudAllowedSites: [location.hostname],
+        cloudAllowedSites: ['top.example'],
       },
     });
     expect(mocks.startWatcher).toHaveBeenCalledTimes(2);
@@ -117,5 +124,34 @@ describe('content-script settings boundary', () => {
       },
     });
     expect(mocks.stop).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps checking off when a stored block entry is an equivalent FQDN spelling', async () => {
+    let main: (() => void) | undefined;
+    (globalThis as unknown as { defineContentScript: (config: { main: () => void }) => unknown })
+      .defineContentScript = (config) => {
+        main = config.main;
+        return config;
+      };
+    globalThis.chrome = {
+      runtime: {
+        onMessage: { addListener: vi.fn() },
+      },
+    } as unknown as typeof chrome;
+    mocks.sendTyped.mockResolvedValue({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        dataConsentVersion: 1,
+        disabledSites: ['TOP.EXAMPLE.'],
+      },
+      siteHost: 'top.example',
+    });
+
+    await import('../entrypoints/content');
+    main?.();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mocks.startWatcher).not.toHaveBeenCalled();
   });
 });

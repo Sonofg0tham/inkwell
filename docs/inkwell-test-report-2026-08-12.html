@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inkwell v0.1.1 test and Grammarly parity report</title>
+<style>
+  :root {
+    --paper: #fbf7ef;
+    --sheet: #fffdf8;
+    --ink: #111b3b;
+    --muted: #6f604e;
+    --line: #ddcfba;
+    --accent: #c74418;
+    --accent-soft: #f8dfd4;
+    --good: #176b4d;
+    --good-soft: #dff2e9;
+    --warn: #9b540d;
+    --warn-soft: #fae9ca;
+    --bad: #a52f32;
+    --bad-soft: #f8dfe0;
+    --code: #f1eadf;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --paper: #121624;
+      --sheet: #191e2f;
+      --ink: #f6eedf;
+      --muted: #c3b49e;
+      --line: #443e43;
+      --accent: #ff8055;
+      --accent-soft: #4b2927;
+      --good: #75d7ac;
+      --good-soft: #173d32;
+      --warn: #f4bd72;
+      --warn-soft: #49351e;
+      --bad: #ff9a9e;
+      --bad-soft: #4e292d;
+      --code: #252a3a;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { background: var(--paper); }
+  body {
+    margin: 0;
+    padding: clamp(1.25rem, 4vw, 3.5rem) 1rem 5rem;
+    color: var(--ink);
+    background:
+      radial-gradient(circle at 1px 1px, color-mix(in srgb, var(--accent) 18%, transparent) 1px, transparent 1.2px),
+      var(--paper);
+    background-size: 22px 22px;
+    font: 17px/1.68 Verdana, Geneva, sans-serif;
+  }
+  main {
+    width: min(76ch, 100%);
+    margin: 0 auto;
+    padding: clamp(1.35rem, 5vw, 3.5rem);
+    border: 1px solid var(--line);
+    border-top: 7px solid var(--accent);
+    background: var(--sheet);
+    box-shadow: 10px 10px 0 color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+  h1, h2, h3 {
+    font-family: Georgia, "Times New Roman", serif;
+    color: var(--ink);
+    text-wrap: balance;
+  }
+  h1 { margin: 0 0 .7rem; font-size: clamp(2rem, 6vw, 3.25rem); line-height: 1.04; }
+  h2 {
+    margin: 2.8rem 0 .85rem;
+    padding-top: 1.35rem;
+    border-top: 1px dotted var(--line);
+    font-size: 1.55rem;
+    line-height: 1.2;
+  }
+  h3 { margin: 1.7rem 0 .45rem; font-size: 1.12rem; }
+  p, li { margin: 0 0 .9rem; }
+  ul { padding-left: 1.35rem; }
+  a { color: var(--accent); text-underline-offset: .18em; }
+  code {
+    padding: .12em .38em;
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    background: var(--code);
+    font: .9em/1.4 Consolas, "Cascadia Code", monospace;
+    overflow-wrap: anywhere;
+  }
+  .kicker {
+    margin-bottom: .55rem;
+    color: var(--accent);
+    font: 700 .75rem/1.2 Consolas, monospace;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+  }
+  .lead { max-width: 62ch; margin-bottom: 1.5rem; color: var(--muted); font-size: 1.08rem; }
+  .verdict {
+    margin: 1.7rem 0;
+    padding: 1.15rem 1.25rem;
+    border: 2px solid var(--ink);
+    border-left: 7px solid var(--accent);
+    background: var(--accent-soft);
+  }
+  .verdict strong { display: block; margin-bottom: .35rem; font-family: Georgia, serif; font-size: 1.2rem; }
+  .metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: .8rem;
+    margin: 1.35rem 0;
+  }
+  .metric { padding: .85rem 1rem; border: 1px solid var(--line); background: var(--paper); }
+  .metric b { display: block; margin-bottom: .15rem; font: 700 1.35rem/1.2 Georgia, serif; color: var(--accent); }
+  .metric span { color: var(--muted); font-size: .88rem; }
+  .callout { margin: 1.25rem 0; padding: 1rem 1.1rem; border-left: 5px solid var(--warn); background: var(--warn-soft); }
+  .callout.good { border-color: var(--good); background: var(--good-soft); }
+  .table-wrap { margin: 1.2rem 0; overflow-x: auto; border: 1px solid var(--line); }
+  table { width: 100%; min-width: 670px; border-collapse: collapse; background: var(--sheet); font-size: .91rem; }
+  th, td { padding: .72rem .8rem; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th { color: var(--muted); background: var(--paper); font-size: .79rem; letter-spacing: .05em; text-transform: uppercase; }
+  tr:last-child td { border-bottom: 0; }
+  .badge {
+    display: inline-block;
+    padding: .12rem .42rem;
+    border-radius: 999px;
+    font-size: .75rem;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+  .pass { color: var(--good); background: var(--good-soft); }
+  .partial { color: var(--warn); background: var(--warn-soft); }
+  .missing, .high { color: var(--bad); background: var(--bad-soft); }
+  .medium { color: var(--warn); background: var(--warn-soft); }
+  .low { color: var(--muted); background: var(--code); }
+  .foot { margin-top: 2.8rem; padding-top: 1.2rem; border-top: 1px solid var(--line); color: var(--muted); font-size: .82rem; }
+  @media (max-width: 620px) {
+    body { padding-inline: .65rem; }
+    main { padding: 1.2rem; box-shadow: 5px 5px 0 color-mix(in srgb, var(--accent) 15%, transparent); }
+    .metrics { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <p class="kicker">Release acceptance, 12 August 2026</p>
+  <h1>Inkwell v0.1.1 test and Grammarly parity report</h1>
+  <p class="lead">A clean-install, real-model and installed-browser review of the local-LLM proofreading extension.</p>
+
+  <div class="verdict">
+    <strong>Verdict: ready for supervised personal Chrome use, but nowhere near full Grammarly parity.</strong>
+    The core proofreading path is real and substantially stronger than v0.1.0. It works with the recommended local Qwen model across the main editable DOM patterns. The missing languages, browsers, Google Docs integration, tone tools and broader writing suite still rule out a Grammarly-equivalent claim.
+  </div>
+
+  <div class="metrics" aria-label="Test summary">
+    <div class="metric"><b>423 passed</b><span>Vitest assertions after a clean lockfile install</span></div>
+    <div class="metric"><b>1 + 1 passed</b><span>Installed Chrome build and exact extracted ZIP</span></div>
+    <div class="metric"><b>0 vulnerabilities</b><span>Live production and full npm advisory checks</span></div>
+    <div class="metric"><b>4.6 MB</b><span>Chrome and Edge MV3 production builds</span></div>
+  </div>
+
+  <h2>What passed</h2>
+  <ul>
+    <li><code>npm.cmd ci</code>, TypeScript, all production builds and the v0.1.1 ZIP completed successfully.</li>
+    <li>Vitest passed 34 files and 423 tests. Six opt-in multi-model probes were skipped because <code>INKWELL_PROBE</code> was not set. The live Ollama suite did run.</li>
+    <li><code>qwen2.5:7b-instruct</code> passed four independent qualification calls covering spelling, grammar, punctuation, clean text with a prompt-injection attempt, and a Picky-mode style correction.</li>
+    <li>The installed extension applied a model-only grammar correction in an input, textarea, flat and nested contenteditable editor, controlled field, dynamically added field, open shadow root, same-origin <code>srcdoc</code> frame and cross-origin frame.</li>
+    <li>Nested rich-text formatting survived Apply. Disabling the top-level site also stopped checking inside its cross-origin child frame.</li>
+    <li>The installed extension imported a real one-page PDF through the packaged legacy PDF.js worker, and a large local-model workspace check paused after 60 chunks for explicit continuation.</li>
+    <li>The generated manifest is version 0.1.1, requires Chrome or Edge 119+, injects into all frames with origin fallback, and keeps required host access to loopback providers only. Remote HTTPS providers remain optional permissions.</li>
+    <li>The exact ZIP contains 33 entries and 28 files. It has no tests, traces, environment files or source maps. Every extracted file matched the production build by SHA-256.</li>
+    <li>The Chrome Web Store icon, promotional tile and three screenshots were regenerated, dimension-checked and visually reviewed at desktop and mobile widths.</li>
+  </ul>
+
+  <div class="callout good">
+    <strong>Archive:</strong> <code>inkwell-0.1.1-chrome.zip</code><br>
+    <strong>SHA-256:</strong> <code>D0FB6C8A88B4CD44D6CC7BB3A1D1311928668FF05498A93F28077417BFE8BA01</code>
+  </div>
+
+  <h2>Issues found and fixed</h2>
+  <p>These were confirmed in code or a real browser. Each one has a regression test.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Severity</th><th>Problem</th><th>Fix</th></tr></thead>
+      <tbody>
+        <tr><td><span class="badge high">High</span></td><td>v0.1.0 bundled an advisory-affected PDF.js version.</td><td>Updated PDF.js to 6.2.108 and refreshed the lockfile. Live npm audits now report zero vulnerabilities.</td></tr>
+        <tr><td><span class="badge high">High</span></td><td>The modern PDF.js build required <code>Promise.try</code>, which is unavailable in advertised Chrome and Edge versions 119 to 127.</td><td>Switched the reader and worker to PDF.js's supported legacy bundle. The installed-extension smoke now imports and extracts a real PDF.</td></tr>
+        <tr><td><span class="badge high">High</span></td><td>Provider cancellation and timeout wiring stopped when response headers arrived. A stalled body could occupy every checker slot.</td><td>Kept the request scope alive through body reads and bounded rejected or discarded response cleanup. Caller cancellation, timeouts and retry ordering now have dedicated tests.</td></tr>
+        <tr><td><span class="badge medium">Medium</span></td><td>Site controls followed each frame's hostname. A disabled top-level site could still have a local-model check in a cross-origin child frame.</td><td>The background worker now resolves one canonical top-level hostname for content settings, provider authorisation and popup state.</td></tr>
+        <tr><td><span class="badge medium">Medium</span></td><td>A focused field could become a username, address or opted-out editor after input but before the delayed check.</td><td>Eligibility is checked during input capture and again immediately before provider dispatch.</td></tr>
+        <tr><td><span class="badge medium">Medium</span></td><td>An LLM suggestion spanning a mention, embed or other atomic rich-text node could map to a destructive DOM range.</td><td>Atomic nodes create virtual boundaries, and Apply rejects every range crossing one. Fourteen atomic element types are covered.</td></tr>
+        <tr><td><span class="badge medium">Medium</span></td><td>Chromium could hoist a full replacement outside an inline formatted span, while a suffix insertion at an inline boundary could inherit the following element's style.</td><td>Contenteditable fixes now edit only the changed middle and use the correct forward or backward boundary affinity. Browser and DOM regressions prove formatting stays with the intended text.</td></tr>
+        <tr><td><span class="badge medium">Medium</span></td><td>Large documents could restart forever at the web-editor budget or silently consume hundreds of local or paid cloud model calls.</td><td>Adjacent short lines are coalesced, and workspace checks now pause after 60 local or 10 remote chunks. The user must explicitly continue each batch, and rate-limit retries preserve completed progress. A 399,996-character stress case produces 334 chunks.</td></tr>
+        <tr><td><span class="badge low">Low</span></td><td>Empty category tabs said the whole document was clear even when another category contained suggestions.</td><td>Filtered empty states now name the selected category. The global all-clear copy is reserved for an actually clear document.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>Grammarly parity</h2>
+  <p>Grammarly's current browser guide covers Chrome, Safari, Firefox and Edge, Google Docs, tone detection, generative AI, definitions, synonyms and granular preference controls. Its wider product now includes multilingual suggestions and document agents for rewriting, citations, originality and audience work. The comparison below uses current official support pages.</p>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Capability</th><th>Inkwell v0.1.1</th><th>Parity</th></tr></thead>
+      <tbody>
+        <tr><td>Inline spelling, grammar and punctuation</td><td>Working on the tested ordinary DOM editor types, with deterministic local fallback.</td><td><span class="badge partial">Partial</span></td></tr>
+        <tr><td>Style and wordiness</td><td>Picky mode is enforced and qualification-tested, but depth depends on the selected model.</td><td><span class="badge partial">Partial</span></td></tr>
+        <tr><td>Five English dialects</td><td>British, American, Canadian, Australian and Indian English are selectable.</td><td><span class="badge pass">Covered</span></td></tr>
+        <tr><td>Personal dictionary and per-site controls</td><td>Working, including Add to dictionary, Ignore all and top-level frame policy.</td><td><span class="badge pass">Core covered</span></td></tr>
+        <tr><td>Google Docs</td><td>Explicitly unsupported.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Browser range</td><td>Chrome is runtime-tested. Edge builds successfully. Firefox and Safari are unsupported.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Languages beyond English</td><td>Not implemented. Grammarly documents suggestions in 23 additional languages.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Tone detection and tone rewrites</td><td>Not implemented.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Generative rewrite, AI chat and reply tools</td><td>Not implemented.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Definitions, synonyms and writing goals</td><td>Not implemented.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Plagiarism, citations and AI detection</td><td>Not implemented.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Personal voice, paragraph rewrites and audience tools</td><td>Not implemented.</td><td><span class="badge missing">Missing</span></td></tr>
+        <tr><td>Desktop, native-app and mobile coverage</td><td>Not implemented.</td><td><span class="badge missing">Missing</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>Official references: <a href="https://support.grammarly.com/hc/en-us/articles/115000091592-Grammarly-s-browser-extension-user-guide">browser extension guide</a>, <a href="https://support.grammarly.com/hc/en-us/articles/115000090991-Does-Grammarly-support-Google-Docs">Google Docs support</a>, <a href="https://support.grammarly.com/hc/en-us/articles/115000090971-Does-Grammarly-support-languages-other-than-English">language support</a>, <a href="https://support.grammarly.com/hc/en-us/articles/10674801783309-How-do-Grammarly-s-tone-suggestions-work">tone suggestions</a>, <a href="https://support.grammarly.com/hc/en-us/articles/38552281546765-Docs-Grammarly-s-new-AI-writing-surface-user-guide">Docs and writing agents</a>, and <a href="https://support.grammarly.com/hc/en-us/articles/115000091452-Plagiarism-Checker-user-guide">plagiarism checking</a>.</p>
+
+  <h2>What is still unproven</h2>
+  <ul>
+    <li>No logged-in manual run was completed on Gmail, Slack, Notion, Word Online, Reddit or other named third-party products. The browser fixture covers their common DOM patterns, not every product's private implementation or future redesigns.</li>
+    <li>Chrome was the only browser exercised as a live installed extension. The Edge result is a production build check, not a separate runtime session.</li>
+    <li><code>data:</code>, <code>blob:</code> and <code>filesystem:</code> origin-fallback injection is present in the manifest but was not exercised as a real opaque-frame Apply flow.</li>
+    <li>Closed shadow-root fields remain inaccessible by browser design. Inkwell's own overlay uses a closed shadow root, which the test reaches through Chrome DevTools only for verification.</li>
+    <li>Model behaviour can drift. The qualification gate catches obvious unsuitability, but it cannot make every local or cloud model as consistent as a centrally managed commercial service.</li>
+  </ul>
+
+  <div class="callout">
+    <strong>Release advice:</strong> retire the v0.1.0 prerelease once v0.1.1 clears pull-request CI. Market v0.1.1 as a private, local-first Chromium proofreading beta. Do not call it a Grammarly replacement or say it works everywhere.
+  </div>
+
+  <p class="foot">Prepared from current source inspection, a clean npm install, live npm advisory data, a real local Ollama model, deterministic integration tests, two installed-extension Chromium runs, the exact release archive, and current official Grammarly documentation.</p>
+</main>
+</body>
+</html>

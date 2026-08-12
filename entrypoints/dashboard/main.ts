@@ -11,7 +11,13 @@ import {
   getStorageUsage,
   type DocumentMetadata,
 } from '../../lib/storage/documents';
-import { hasSecret, loadSettings, saveSecret, saveSettings } from '../../lib/settings/store';
+import {
+  addPersonalDictionaryWord,
+  hasSecret,
+  loadSettings,
+  saveSecret,
+  saveSettings,
+} from '../../lib/settings/store';
 import { PortClient } from '../../lib/content/portClient';
 import { chunkText } from '../../lib/checker/chunker';
 import { fnvHash } from '../../lib/checker/hash';
@@ -45,11 +51,15 @@ import {
 let activeDocumentId: string | null = null;
 let activeSuggestions: Suggestion[] = [];
 let activeFilter: string = 'all';
+const ignoredDocumentWords = new Set<string>();
 let portClient: PortClient | null = null;
 let autoSaveTimeout: ReturnType<typeof setTimeout> | null = null;
 let checkTimeout: ReturnType<typeof setTimeout> | null = null;
 let latestRunId: string | null = null;
 const activeRequestIds = new Set<string>();
+const MAX_CONCURRENT_DOCUMENT_CHECKS = 4;
+const MAX_LOCAL_CHUNKS_PER_RUN = 60;
+const MAX_REMOTE_CHUNKS_PER_RUN = 10;
 let isChecking = false;
 let checkPending = false;
 let checkerError: { code: string; hint: string } | null = null;
@@ -60,6 +70,7 @@ let droppedCount = 0;
 let droppedReasons: string[] = [];
 let incompleteHint: string | null = null;
 let lastCheck: { model: string; at: number } | null = null;
+let workspaceContinuation: WorkspaceContinuation | null = null;
 let dashboardStarted = false;
 let consentGateBound = false;
 
@@ -73,12 +84,26 @@ export function __setRateLimitCooldownForTests(ms: number) {
   rateLimitCooldownMs = ms;
 }
 
+function runCheckerFromCurrentProgress(): void {
+  void runChecker({ continueExisting: workspaceContinuation !== null });
+}
+
+function forceCheckerFromCurrentProgress(): void {
+  if (cooldownRetryTimer) {
+    clearTimeout(cooldownRetryTimer);
+    cooldownRetryTimer = null;
+  }
+  cooldownUntil = 0;
+  checkerError = null;
+  runCheckerFromCurrentProgress();
+}
+
 function scheduleCooldownRetry() {
   if (cooldownRetryTimer) return;
   const delay = Math.max(0, cooldownUntil - Date.now()) + 50;
   cooldownRetryTimer = setTrackedTimeout(() => {
     cooldownRetryTimer = null;
-    runChecker();
+    runCheckerFromCurrentProgress();
   }, delay);
 }
 
@@ -100,6 +125,51 @@ interface Suggestion {
   original: string;
   replacement: string;
   explanation: string;
+}
+
+interface WorkspaceContinuation {
+  documentHash: string;
+  nextChunkIndex: number;
+  totalChunks: number;
+  suggestions: Suggestion[];
+  droppedCount: number;
+  droppedReasons: string[];
+  incompleteHint: string | null;
+  model: string;
+}
+
+function spellingWordKey(word: string): string {
+  return word.replaceAll('\u2019', "'").toLocaleLowerCase('en');
+}
+
+function ignoreSpellingWord(word: string): void {
+  const key = spellingWordKey(word);
+  ignoredDocumentWords.add(key);
+  activeSuggestions = activeSuggestions.filter(
+    (suggestion) => suggestion.type !== 'spelling' || spellingWordKey(suggestion.original) !== key,
+  );
+  renderSuggestions();
+}
+
+async function addSpellingToDictionary(issue: Suggestion, button: HTMLButtonElement): Promise<void> {
+  button.disabled = true;
+  button.textContent = 'Saving\u2026';
+  try {
+    const saved = await addPersonalDictionaryWord(issue.original);
+    const settings = saved ? null : await loadSettings();
+    const alreadySaved = settings?.personalDictionary.some(
+      (word) => spellingWordKey(word) === spellingWordKey(issue.original),
+    );
+    if (saved || alreadySaved) {
+      ignoreSpellingWord(issue.original);
+      return;
+    }
+    button.disabled = false;
+    button.textContent = 'Could not save. Try again';
+  } catch {
+    button.disabled = false;
+    button.textContent = 'Could not save. Try again';
+  }
 }
 
 // ── Helper: tracked timeouts for test environments ───────────────
@@ -217,6 +287,7 @@ async function flushCurrentDocument() {
 function triggerChecker() {
   if (checkTimeout) clearTimeout(checkTimeout);
   cancelActiveChecks();
+  workspaceContinuation = null;
   // Mark a check as pending the instant the user types, so the panel never
   // shows a stale verdict for text that has since changed.
   checkPending = true;
@@ -234,7 +305,7 @@ function cancelActiveChecks(): void {
   isChecking = false;
 }
 
-async function runChecker() {
+async function runChecker(options: { continueExisting?: boolean } = {}) {
   const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
   if (!textarea) return;
   const text = textarea.value;
@@ -246,6 +317,7 @@ async function runChecker() {
     checkPending = false;
     droppedCount = 0;
     incompleteHint = null;
+    workspaceContinuation = null;
     checkedHash = null;
     cancelActiveChecks();
     renderSuggestions();
@@ -256,6 +328,7 @@ async function runChecker() {
     try { portClient = new PortClient(); } catch { return; }
   }
   if (portClient.dead) { renderConnectionFailed(); return; }
+  const checkerClient = portClient;
 
   // Still cooling down after a rate limit — wait it out, then retry once.
   if (Date.now() < cooldownUntil) {
@@ -270,10 +343,24 @@ async function runChecker() {
   const settings = await loadSettings();
   if (latestRunId !== runId || textarea.value !== text) return;
   const chunks = chunkText(text, settings.dialect);
+  const savedContinuation =
+    options.continueExisting === true
+    && workspaceContinuation?.documentHash === documentHash
+    && workspaceContinuation.totalChunks === chunks.length
+    && workspaceContinuation.nextChunkIndex < chunks.length
+      ? workspaceContinuation
+      : null;
+  if (!savedContinuation) workspaceContinuation = null;
+  const chunkLimit = providerUsesRemoteEndpoint(settings.provider.kind, settings.provider.baseUrl)
+    ? MAX_REMOTE_CHUNKS_PER_RUN
+    : MAX_LOCAL_CHUNKS_PER_RUN;
+  const batchStart = savedContinuation?.nextChunkIndex ?? 0;
+  const batchEnd = Math.min(chunks.length, batchStart + chunkLimit);
 
   isChecking = true;
   checkPending = false;
   updateWritingPulse();
+  updateCheckButton();
 
   if (chunks.length === 0) {
     latestRunId = null;
@@ -283,17 +370,18 @@ async function runChecker() {
     droppedCount = 0;
     droppedReasons = [];
     incompleteHint = null;
+    workspaceContinuation = null;
     checkedHash = documentHash;
     renderSuggestions();
     return;
   }
 
-  let remaining = chunks.length;
-  const merged: Suggestion[] = [];
-  let mergedDropped = 0;
-  const mergedReasons = new Set<string>();
-  let mergedIncomplete: string | null = null;
-  let model = '';
+  let remaining = batchEnd - batchStart;
+  const merged: Suggestion[] = savedContinuation ? [...savedContinuation.suggestions] : [];
+  let mergedDropped = savedContinuation?.droppedCount ?? 0;
+  const mergedReasons = new Set<string>(savedContinuation?.droppedReasons ?? []);
+  let mergedIncomplete: string | null = savedContinuation?.incompleteHint ?? null;
+  let model = savedContinuation?.model ?? '';
 
   const finish = (): void => {
     if (latestRunId !== runId || remaining > 0) return;
@@ -306,58 +394,87 @@ async function runChecker() {
     droppedReasons = [...mergedReasons].slice(0, 3);
     incompleteHint = mergedIncomplete;
     lastCheck = { model, at: Date.now() };
-    activeSuggestions = merged.sort((a, b) => a.start - b.start || a.end - b.end);
+    workspaceContinuation = batchEnd < chunks.length
+      ? {
+          documentHash,
+          nextChunkIndex: batchEnd,
+          totalChunks: chunks.length,
+          suggestions: merged,
+          droppedCount: mergedDropped,
+          droppedReasons: [...mergedReasons].slice(0, 3),
+          incompleteHint: mergedIncomplete,
+          model,
+        }
+      : null;
+    activeSuggestions = merged
+      .filter(
+        (suggestion) =>
+          suggestion.type !== 'spelling'
+          || !ignoredDocumentWords.has(spellingWordKey(suggestion.original)),
+      )
+      .sort((a, b) => a.start - b.start || a.end - b.end);
     renderSuggestions();
   };
 
-  for (const chunk of chunks) {
-    const requestId = crypto.randomUUID();
-    activeRequestIds.add(requestId);
-    portClient.check(requestId, chunk.hash, chunk.text, (response) => {
-      activeRequestIds.delete(requestId);
-      if (latestRunId !== runId) return;
-      if (response.t === 'error') {
-        const remainingIds = [...activeRequestIds];
-        activeRequestIds.clear();
-        if (remainingIds.length > 0) portClient?.cancel(remainingIds);
-        latestRunId = null;
-        isChecking = false;
-        checkerError = { code: response.code, hint: response.hint };
-        if (response.code === 'rate_limit' || response.code === 'unavailable') {
-          cooldownUntil = Date.now() + rateLimitCooldownMs;
-          scheduleCooldownRetry();
+  let nextChunkIndex = batchStart;
+  const dispatchNext = (): void => {
+    if (latestRunId !== runId) return;
+    while (
+      nextChunkIndex < batchEnd
+      && activeRequestIds.size < MAX_CONCURRENT_DOCUMENT_CHECKS
+    ) {
+      const chunk = chunks[nextChunkIndex++]!;
+      const requestId = crypto.randomUUID();
+      activeRequestIds.add(requestId);
+      checkerClient.check(requestId, chunk.hash, chunk.text, (response) => {
+        activeRequestIds.delete(requestId);
+        if (latestRunId !== runId) return;
+        if (response.t === 'error') {
+          const remainingIds = [...activeRequestIds];
+          activeRequestIds.clear();
+          if (remainingIds.length > 0) checkerClient.cancel(remainingIds);
+          latestRunId = null;
+          isChecking = false;
+          checkerError = { code: response.code, hint: response.hint };
+          if (response.code === 'rate_limit' || response.code === 'unavailable') {
+            cooldownUntil = Date.now() + rateLimitCooldownMs;
+            scheduleCooldownRetry();
+          }
+          console.error('Checker error:', response.hint);
+          renderSuggestions();
+          return;
         }
-        console.error('Checker error:', response.hint);
-        renderSuggestions();
-        return;
-      }
 
-      model = response.model || model;
-      if (response.incomplete?.hint && !mergedIncomplete) {
-        mergedIncomplete = response.incomplete.hint;
-      }
-      mergedDropped += Math.max(0, Math.floor(Number(response.dropped) || 0));
-      for (const reason of response.droppedReasons ?? []) {
-        if (typeof reason === 'string') mergedReasons.add(reason);
-      }
-      for (const issue of response.issues) {
-        const start = chunk.docOffset + issue.start;
-        merged.push({
-          id: `${issue.id}@${start}`,
-          type: issue.type,
-          start,
-          end: chunk.docOffset + issue.end,
-          original: issue.original,
-          replacement: issue.replacement,
-          explanation: issue.explanation,
-        });
-      }
-      remaining--;
-      finish();
-    });
-  }
+        model = response.model || model;
+        if (response.incomplete?.hint && !mergedIncomplete) {
+          mergedIncomplete = response.incomplete.hint;
+        }
+        mergedDropped += Math.max(0, Math.floor(Number(response.dropped) || 0));
+        for (const reason of response.droppedReasons ?? []) {
+          if (typeof reason === 'string') mergedReasons.add(reason);
+        }
+        for (const issue of response.issues) {
+          const start = chunk.docOffset + issue.start;
+          merged.push({
+            id: `${issue.id}@${start}`,
+            type: issue.type,
+            start,
+            end: chunk.docOffset + issue.end,
+            original: issue.original,
+            replacement: issue.replacement,
+            explanation: issue.explanation,
+          });
+        }
+        remaining--;
+        dispatchNext();
+        finish();
+      });
+    }
+  };
 
-  if (portClient.dead) renderConnectionFailed();
+  dispatchNext();
+
+  if (checkerClient.dead) renderConnectionFailed();
 }
 
 function renderConnectionFailed() {
@@ -371,7 +488,7 @@ function renderConnectionFailed() {
   document.getElementById('btn-reconnect-port')?.addEventListener('click', () => {
     portClient?.destroy();
     portClient = null;
-    runChecker();
+    forceCheckerFromCurrentProgress();
   });
 }
 
@@ -387,6 +504,7 @@ function renderSuggestions() {
 
   updateWritingPulse();
   updateEditActions();
+  updateCheckButton();
 
   if (idleEl) idleEl.style.display = 'none';
 
@@ -404,7 +522,7 @@ function renderSuggestions() {
         <button class="btn-retry-check btn-primary btn-sm">Try again</button>
         <button class="btn-error-settings btn-ghost btn-sm">Provider settings</button>
       </div>`;
-    errorCard.querySelector('.btn-retry-check')?.addEventListener('click', () => runChecker());
+    errorCard.querySelector('.btn-retry-check')?.addEventListener('click', forceCheckerFromCurrentProgress);
     errorCard.querySelector('.btn-error-settings')?.addEventListener('click', () => {
       void flushCurrentDocument();
       hideEditor();
@@ -417,6 +535,26 @@ function renderSuggestions() {
   const filtered = activeFilter === 'all'
     ? activeSuggestions
     : activeSuggestions.filter((s) => s.type === activeFilter);
+
+  if (workspaceContinuation) {
+    if (emptyEl) emptyEl.style.display = 'none';
+    const card = document.createElement('div');
+    card.className = 'checker-partial workspace-check-paused';
+    card.setAttribute('role', 'status');
+    card.innerHTML = `
+      <div class="checker-partial-title">Large document check paused</div>
+      <p class="checker-partial-hint">
+        Checked sections 1 to ${workspaceContinuation.nextChunkIndex} of ${workspaceContinuation.totalChunks}.
+        Continue when you are ready to use the model for the next batch.
+      </p>
+      <div class="checker-error-actions">
+        <button class="btn-continue-check btn-primary btn-sm">Continue check</button>
+      </div>`;
+    card.querySelector('.btn-continue-check')?.addEventListener('click', () => {
+      void runChecker({ continueExisting: true });
+    });
+    list.appendChild(card);
+  }
 
   if (incompleteHint) {
     if (emptyEl) emptyEl.style.display = 'none';
@@ -433,7 +571,7 @@ function renderSuggestions() {
         <button class="btn-retry-check btn-primary btn-sm">Try contextual check again</button>
         <button class="btn-error-settings btn-ghost btn-sm">Provider settings</button>
       </div>`;
-    card.querySelector('.btn-retry-check')?.addEventListener('click', () => runChecker());
+    card.querySelector('.btn-retry-check')?.addEventListener('click', forceCheckerFromCurrentProgress);
     card.querySelector('.btn-error-settings')?.addEventListener('click', () => {
       void flushCurrentDocument();
       hideEditor();
@@ -461,7 +599,7 @@ function renderSuggestions() {
         <button class="btn-retry-check btn-primary btn-sm">Check again</button>
         <button class="btn-error-settings btn-ghost btn-sm">Change model</button>
       </div>`;
-    card.querySelector('.btn-retry-check')?.addEventListener('click', () => runChecker());
+    card.querySelector('.btn-retry-check')?.addEventListener('click', forceCheckerFromCurrentProgress);
     card.querySelector('.btn-error-settings')?.addEventListener('click', () => {
       void flushCurrentDocument();
       hideEditor();
@@ -472,7 +610,13 @@ function renderSuggestions() {
   }
 
   if (filtered.length === 0) {
-    if (emptyEl) emptyEl.style.display = incompleteHint ? 'none' : 'flex';
+    const emptyCopy = emptyEl?.querySelector<HTMLElement>('.sugg-empty-text');
+    if (emptyCopy) {
+      emptyCopy.textContent = activeFilter === 'all'
+        ? 'Writing looks clear. Inkwell will keep monitoring as you type.'
+        : `No ${activeFilter} suggestions in this document.`;
+    }
+    if (emptyEl) emptyEl.style.display = incompleteHint || workspaceContinuation ? 'none' : 'flex';
     return;
   }
   if (emptyEl) emptyEl.style.display = 'none';
@@ -487,12 +631,20 @@ function renderSuggestions() {
       <div class="suggestion-original"><del>${esc(issue.original)}</del> → <ins>${esc(issue.replacement)}</ins></div>
       <div class="suggestion-explanation">${esc(issue.explanation)}</div>
       <div class="suggestion-actions">
-        <button class="btn-accept-suggestion">Accept</button>
-        <button class="btn-dismiss-suggestion">Dismiss</button>
+        <button type="button" class="btn-accept-suggestion">Accept</button>
+        <button type="button" class="btn-dismiss-suggestion">Dismiss</button>
+        ${issue.type === 'spelling' ? `
+          <button type="button" class="btn-add-dictionary">Add to dictionary</button>
+          <button type="button" class="btn-ignore-all">Ignore all</button>
+        ` : ''}
       </div>`;
 
     card.querySelector('.btn-accept-suggestion')?.addEventListener('click', () => acceptSuggestion(issue));
     card.querySelector('.btn-dismiss-suggestion')?.addEventListener('click', () => dismissSuggestion(issue.id));
+    card.querySelector<HTMLButtonElement>('.btn-add-dictionary')?.addEventListener('click', (event) => {
+      void addSpellingToDictionary(issue, event.currentTarget as HTMLButtonElement);
+    });
+    card.querySelector('.btn-ignore-all')?.addEventListener('click', () => ignoreSpellingWord(issue.original));
     list.appendChild(card);
   });
 
@@ -596,7 +748,7 @@ function updateWritingPulse() {
   } else if (!verdictMatchesText) {
     pulse.textContent = 'Not checked yet';
     pulse.dataset.state = 'unchecked';
-  } else if (incompleteHint || (droppedCount > 0 && count === 0)) {
+  } else if (workspaceContinuation || incompleteHint || (droppedCount > 0 && count === 0)) {
     pulse.textContent = 'Needs a closer look';
     pulse.dataset.state = 'partial';
   } else if (count === 0) {
@@ -617,6 +769,13 @@ function updateWritingPulse() {
     const countEl = tab.querySelector('.tab-count');
     if (countEl) countEl.textContent = tabCount ? String(tabCount) : '';
   });
+}
+
+function updateCheckButton() {
+  const button = document.getElementById('btn-check-now') as HTMLButtonElement | null;
+  if (!button) return;
+  button.textContent = workspaceContinuation ? 'Continue check' : 'Check now';
+  button.disabled = isChecking;
 }
 
 // ── Undo ─────────────────────────────────────────────────────────
@@ -832,6 +991,7 @@ function closeEditor(): Promise<void> {
 export async function selectDocument(id: string) {
   if (activeDocumentId && activeDocumentId !== id) await flushCurrentDocument();
   activeDocumentId = id;
+  ignoredDocumentWords.clear();
 
   try {
     const doc = await getDocument(id);
@@ -849,6 +1009,7 @@ export async function selectDocument(id: string) {
       checkedHash = null;
       droppedCount = 0;
       incompleteHint = null;
+      workspaceContinuation = null;
       lastCheck = null;
       checkerError = null;
       renderSuggestions();
@@ -1408,6 +1569,7 @@ function initConsentedDashboard() {
   activeDocumentId = null;
   activeSuggestions = [];
   activeFilter = 'all';
+  ignoredDocumentWords.clear();
   latestRunId = null;
   activeRequestIds.clear();
   isChecking = false;
@@ -1417,6 +1579,7 @@ function initConsentedDashboard() {
   droppedReasons = [];
   incompleteHint = null;
   lastCheck = null;
+  workspaceContinuation = null;
   checkerError = null;
   cooldownUntil = 0;
   if (cooldownRetryTimer) { clearTimeout(cooldownRetryTimer); cooldownRetryTimer = null; }
@@ -1495,9 +1658,7 @@ function initConsentedDashboard() {
   // Force a check without waiting for the typing pause
   document.getElementById('btn-check-now')?.addEventListener('click', () => {
     if (checkTimeout) { clearTimeout(checkTimeout); checkTimeout = null; }
-    cooldownUntil = 0;
-    checkerError = null;
-    runChecker();
+    forceCheckerFromCurrentProgress();
   });
   document.getElementById('btn-open-settings')?.addEventListener('click', () => {
     void chrome.runtime.openOptionsPage();

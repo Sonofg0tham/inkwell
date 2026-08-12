@@ -14,6 +14,21 @@ export interface TextIndex {
 }
 
 const SKIP_TAGS = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEMPLATE']);
+const ATOMIC_TAGS = new Set([
+  'IMG',
+  'HR',
+  'SVG',
+  'CANVAS',
+  'IFRAME',
+  'OBJECT',
+  'EMBED',
+  'VIDEO',
+  'AUDIO',
+  'INPUT',
+  'TEXTAREA',
+  'SELECT',
+  'BUTTON',
+]);
 const BLOCK_DISPLAYS = new Set([
   'block',
   'list-item',
@@ -47,8 +62,15 @@ export function buildTextIndex(root: HTMLElement): TextIndex {
     if (node.nodeType !== Node.ELEMENT_NODE) return;
     const el = node as HTMLElement;
     if (SKIP_TAGS.has(el.tagName)) return;
-    if (el.getAttribute('contenteditable') === 'false') return;
-    if (el.tagName === 'BR') {
+    const tagName = el.tagName.toUpperCase();
+    if (el.getAttribute('contenteditable') === 'false' || ATOMIC_TAGS.has(tagName)) {
+      // Mentions, media, embeds and form controls must be hard text boundaries.
+      // Otherwise text on either side is concatenated and a model range can
+      // span and delete the atomic node.
+      ensureNewline();
+      return;
+    }
+    if (tagName === 'BR') {
       text += '\n';
       return;
     }
@@ -77,8 +99,9 @@ function locate(
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
     const s = segs[mid]!;
-    if (offset < s.start) hi = mid - 1;
-    else if (offset > s.start + s.length) lo = mid + 1;
+    const end = s.start + s.length;
+    if (offset < s.start || (offset === s.start && direction === 'backward')) hi = mid - 1;
+    else if (offset > end || (offset === end && direction === 'forward')) lo = mid + 1;
     else {
       found = mid;
       break;
@@ -88,7 +111,11 @@ function locate(
     // Offset lands in a virtual newline (block boundary) — snap to a real node.
     if (direction === 'forward') {
       const next = segs.find((s) => s.start >= offset);
-      return next ? { node: next.node, offset: 0 } : null;
+      if (next) return { node: next.node, offset: 0 };
+      const last = segs.at(-1)!;
+      return offset === last.start + last.length
+        ? { node: last.node, offset: last.length }
+        : null;
     }
     let prev: TextSegment | null = null;
     for (const s of segs) {
@@ -101,9 +128,38 @@ function locate(
   return { node: s.node, offset: offset - s.start };
 }
 
-export function rangeFromOffsets(index: TextIndex, start: number, end: number): Range | null {
-  const startLoc = locate(index, start, 'forward');
-  const endLoc = locate(index, end, 'backward');
+function isContiguousIndexedText(index: TextIndex, start: number, end: number): boolean {
+  if (start < 0 || end < start || end > index.text.length) return false;
+  if (start === end) return true;
+
+  let coveredUntil = start;
+  for (const segment of index.segments) {
+    const segmentEnd = segment.start + segment.length;
+    if (segmentEnd <= coveredUntil) continue;
+    if (segment.start > coveredUntil) return false;
+    coveredUntil = segmentEnd;
+    if (coveredUntil >= end) return true;
+  }
+  return false;
+}
+
+export function rangeFromOffsets(
+  index: TextIndex,
+  start: number,
+  end: number,
+  allowCollapsed = false,
+  collapsedAffinity: 'forward' | 'backward' = 'forward',
+): Range | null {
+  // Virtual newlines represent block and atomic-node boundaries, not DOM text.
+  // A Range spanning one could delete an embed even when the model quoted the
+  // indexed newline exactly, so only map fully contiguous text segments.
+  if (!isContiguousIndexedText(index, start, end)) return null;
+  const startLoc = locate(
+    index,
+    start,
+    start === end && allowCollapsed ? collapsedAffinity : 'forward',
+  );
+  const endLoc = start === end && allowCollapsed ? startLoc : locate(index, end, 'backward');
   if (!startLoc || !endLoc) return null;
   const doc = startLoc.node.ownerDocument;
   const range = doc.createRange();
@@ -113,7 +169,7 @@ export function rangeFromOffsets(index: TextIndex, start: number, end: number): 
   } catch {
     return null;
   }
-  return range.collapsed ? null : range;
+  return range.collapsed && !allowCollapsed ? null : range;
 }
 
 /** Document-text offset for a (node, offset) selection position, or null. */

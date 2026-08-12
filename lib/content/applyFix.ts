@@ -5,6 +5,40 @@
 import type { DocIssue, FieldTarget } from './types';
 import { buildTextIndex, rangeFromOffsets } from './textIndex';
 
+interface MinimalReplacement {
+  start: number;
+  end: number;
+  text: string;
+}
+
+/**
+ * Keep native contenteditable edits inside the narrowest possible DOM range.
+ * Chromium can move a full replacement outside an inline wrapper when the
+ * selection starts at that wrapper's first character. Inserting only the
+ * changed middle avoids crossing that boundary and preserves formatting.
+ */
+function minimiseReplacement(issue: DocIssue): MinimalReplacement {
+  const { original, replacement } = issue;
+  const sharedLimit = Math.min(original.length, replacement.length);
+  let prefix = 0;
+  while (prefix < sharedLimit && original[prefix] === replacement[prefix]) prefix += 1;
+
+  let suffix = 0;
+  while (
+    suffix < original.length - prefix &&
+    suffix < replacement.length - prefix &&
+    original[original.length - 1 - suffix] === replacement[replacement.length - 1 - suffix]
+  ) {
+    suffix += 1;
+  }
+
+  return {
+    start: issue.docStart + prefix,
+    end: issue.docEnd - suffix,
+    text: replacement.slice(prefix, replacement.length - suffix),
+  };
+}
+
 function applyToTextControl(
   el: HTMLTextAreaElement | HTMLInputElement,
   issue: DocIssue,
@@ -51,7 +85,13 @@ function applyToTextControl(
 function applyToContentEditable(el: HTMLElement, issue: DocIssue): boolean {
   const index = buildTextIndex(el);
   if (index.text.slice(issue.docStart, issue.docEnd) !== issue.original) return false;
-  const range = rangeFromOffsets(index, issue.docStart, issue.docEnd);
+  const edit = minimiseReplacement(issue);
+  if (edit.start === edit.end && edit.text === '') return true;
+  const collapsedAffinity =
+    edit.start === edit.end && edit.start > issue.docStart && edit.start === issue.docEnd
+      ? 'backward'
+      : 'forward';
+  const range = rangeFromOffsets(index, edit.start, edit.end, true, collapsedAffinity);
   if (!range) return false;
 
   const doc = el.ownerDocument;
@@ -63,7 +103,7 @@ function applyToContentEditable(el: HTMLElement, issue: DocIssue): boolean {
   selection.addRange(range);
   let ok = false;
   try {
-    ok = doc.execCommand('insertText', false, issue.replacement);
+    ok = doc.execCommand('insertText', false, edit.text);
   } catch {
     ok = false;
   }
@@ -71,9 +111,9 @@ function applyToContentEditable(el: HTMLElement, issue: DocIssue): boolean {
     // Plain-text fallback for pages that block execCommand. Exotic editors may
     // resync their model afterwards; the input event gives them the chance.
     range.deleteContents();
-    range.insertNode(doc.createTextNode(issue.replacement));
+    range.insertNode(doc.createTextNode(edit.text));
     el.dispatchEvent(
-      new InputEvent('input', { bubbles: true, inputType: 'insertText', data: issue.replacement }),
+      new InputEvent('input', { bubbles: true, inputType: 'insertText', data: edit.text }),
     );
   }
   return true;

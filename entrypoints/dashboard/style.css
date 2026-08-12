@@ -848,7 +848,7 @@ input, select, textarea { font: inherit; }
 }
 
 .sugg-tab {
-  padding: 8px 12px;
+  padding: 8px 6px;
   font-size: 12px;
   font-weight: 600;
   color: var(--ink-muted);
@@ -949,6 +949,7 @@ input, select, textarea { font: inherit; }
 .suggestion-actions {
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .btn-accept-suggestion {
@@ -963,7 +964,9 @@ input, select, textarea { font: inherit; }
 
 .btn-accept-suggestion:hover { background: var(--ink-accent-strong); }
 
-.btn-dismiss-suggestion {
+.btn-dismiss-suggestion,
+.btn-add-dictionary,
+.btn-ignore-all {
   padding: 6px 12px;
   color: var(--ink-muted);
   border-radius: 6px;
@@ -972,7 +975,9 @@ input, select, textarea { font: inherit; }
   transition: background 130ms, color 130ms;
 }
 
-.btn-dismiss-suggestion:hover {
+.btn-dismiss-suggestion:hover,
+.btn-add-dictionary:hover,
+.btn-ignore-all:hover {
   background: var(--ink-bg-sunken);
   color: var(--ink-fg);
 }
@@ -1283,6 +1288,8 @@ body {
 .sugg-tab:focus-visible,
 .btn-accept-suggestion:focus-visible,
 .btn-dismiss-suggestion:focus-visible,
+.btn-add-dictionary:focus-visible,
+.btn-ignore-all:focus-visible,
 .btn-card-trash:focus-visible,
 .btn-restore:focus-visible,
 .btn-perm-delete:focus-visible {

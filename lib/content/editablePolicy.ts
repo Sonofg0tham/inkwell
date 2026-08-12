@@ -83,13 +83,32 @@ function hasSensitiveHint(element: Element): boolean {
     const value = element.getAttribute(attribute);
     if (value && SENSITIVE_HINT.test(value)) return true;
   }
+
+  const labelledBy = element.getAttribute('aria-labelledby');
+  if (labelledBy) {
+    for (const id of labelledBy.trim().split(/\s+/)) {
+      const text = element.ownerDocument.getElementById(id)?.textContent;
+      if (text && SENSITIVE_HINT.test(text)) return true;
+    }
+  }
+
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    for (const label of Array.from(element.labels ?? [])) {
+      if (label.textContent && SENSITIVE_HINT.test(label.textContent)) return true;
+    }
+  }
   return false;
 }
 
 function isExcludedByAncestor(element: Element): boolean {
+  let spellcheckResolved = false;
   for (const ancestor of composedAncestors(element)) {
     if (ancestor.hasAttribute('data-inkwell-disable')) return true;
-    if (ancestor.getAttribute('spellcheck')?.toLowerCase() === 'false') return true;
+    if (!spellcheckResolved) {
+      const spellcheck = ancestor.getAttribute('spellcheck')?.toLowerCase();
+      if (spellcheck === 'false') return true;
+      if (spellcheck === 'true' || spellcheck === '') spellcheckResolved = true;
+    }
     if (ancestor.tagName === 'CODE' || ancestor.tagName === 'PRE') return true;
     if (ancestor.getAttribute('role')?.toLowerCase() === 'code') return true;
     for (const className of ancestor.classList) {

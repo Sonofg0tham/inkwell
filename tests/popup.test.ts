@@ -144,4 +144,50 @@ describe('popup workspace navigation', () => {
       expect(saved.cloudAllowedSites).toContain('example.test');
     });
   });
+
+  it('shows a dotted active-tab hostname in canonical form', async () => {
+    await chrome.storage.local.set({
+      settings: { ...DEFAULT_SETTINGS, dataConsentVersion: 1 },
+    });
+    (chrome.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      enabled: true,
+      host: 'Writer.Example.',
+      siteDisabled: false,
+      issueCount: 0,
+      checkPhase: 'idle',
+    });
+
+    await import('../entrypoints/popup/main');
+    await vi.waitFor(() => expect(document.getElementById('site-row')?.hidden).toBe(false));
+
+    expect(document.getElementById('site-host')?.textContent).toBe('writer.example');
+  });
+
+  it('removes an equivalent stored block entry when the dotted site is enabled', async () => {
+    await chrome.storage.local.set({
+      settings: {
+        ...DEFAULT_SETTINGS,
+        dataConsentVersion: 1,
+        disabledSites: ['WRITER.EXAMPLE.'],
+      },
+    });
+    (chrome.runtime.sendMessage as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      enabled: true,
+      host: 'Writer.Example.',
+      siteDisabled: true,
+      issueCount: 0,
+      checkPhase: 'idle',
+    });
+
+    await import('../entrypoints/popup/main');
+    await vi.waitFor(() => expect(document.getElementById('site-row')?.hidden).toBe(false));
+    const toggle = document.getElementById('toggle-site') as HTMLInputElement;
+    toggle.checked = true;
+    toggle.dispatchEvent(new Event('change'));
+
+    await vi.waitFor(async () => {
+      const saved = (await chrome.storage.local.get('settings')).settings;
+      expect(saved.disabledSites).toEqual([]);
+    });
+  });
 });

@@ -5,7 +5,7 @@ export default defineConfig({
     name: 'Inkwell',
     description:
       'Grammar and spelling assistant powered by your own local or cloud LLM. Your text, your model, your choice.',
-    minimum_chrome_version: '102',
+    minimum_chrome_version: '119',
     // unlimitedStorage lifts chrome.storage.local off its 10 MB cap, which an
     // imported PDF can exhaust on its own. It shows no extra install warning.
     permissions: ['storage', 'unlimitedStorage', 'activeTab'],

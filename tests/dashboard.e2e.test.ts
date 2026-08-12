@@ -142,6 +142,95 @@ describe('Inkwell E2E & Integration Test Suite', () => {
         expect(document.querySelectorAll('.suggestion-card').length).toBe(1);
       });
 
+      it('SUG-1.2a: filters punctuation suggestions and exposes their count', async () => {
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = 'Hello , world.';
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1050));
+
+        const punctuationTab = [...document.querySelectorAll<HTMLButtonElement>('.sugg-tab')]
+          .find((tab) => tab.dataset.filter === 'punctuation');
+        expect(punctuationTab).toBeDefined();
+        expect(punctuationTab?.querySelector('.tab-count')?.textContent).toBe('1');
+
+        punctuationTab?.click();
+
+        const visible = [...document.querySelectorAll<HTMLElement>('.suggestion-card')];
+        expect(visible).toHaveLength(1);
+        expect(visible[0]?.classList.contains('punctuation')).toBe(true);
+        expect(punctuationTab?.getAttribute('aria-selected')).toBe('true');
+      });
+
+      it('SUG-1.2aa: describes an empty category without claiming all writing is clear', async () => {
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = 'Their was a beachh.';
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1050));
+
+        const punctuationTab = document.querySelector<HTMLButtonElement>(
+          '.sugg-tab[data-filter="punctuation"]',
+        );
+        punctuationTab?.click();
+
+        expect(document.querySelectorAll('.suggestion-card')).toHaveLength(0);
+        expect(document.querySelector('.sugg-empty-text')?.textContent).toBe(
+          'No punctuation suggestions in this document.',
+        );
+        expect(document.getElementById('writing-pulse')?.textContent).toContain(
+          '2 suggestions to review',
+        );
+      });
+
+      it('SUG-1.2b: adds a spelling to the personal dictionary and clears every matching card', async () => {
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = 'Their was beachh and beachh.';
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1050));
+        expect(document.querySelectorAll('.suggestion-card.spelling')).toHaveLength(2);
+
+        const add = document.querySelector<HTMLButtonElement>(
+          '.suggestion-card.spelling .btn-add-dictionary',
+        );
+        expect(add).not.toBeNull();
+        expect(add?.type).toBe('button');
+        add?.click();
+
+        await vi.waitFor(async () => {
+          const stored = (await chrome.storage.local.get('settings'))['settings'];
+          expect(stored.personalDictionary).toContain('beachh');
+        });
+        expect(document.querySelectorAll('.suggestion-card.spelling')).toHaveLength(0);
+        expect(document.querySelectorAll('.suggestion-card.grammar')).toHaveLength(1);
+      });
+
+      it('SUG-1.2c: ignores every matching spelling on later checks without saving it', async () => {
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = 'Their was beachh and beachh.';
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1050));
+        const ignore = document.querySelector<HTMLButtonElement>(
+          '.suggestion-card.spelling .btn-ignore-all',
+        );
+        expect(ignore).not.toBeNull();
+        expect(ignore?.type).toBe('button');
+        ignore?.click();
+
+        expect(document.querySelectorAll('.suggestion-card.spelling')).toHaveLength(0);
+        expect(document.querySelectorAll('.suggestion-card.grammar')).toHaveLength(1);
+        const stored = (await chrome.storage.local.get('settings'))['settings'];
+        expect(stored.personalDictionary).not.toContain('beachh');
+
+        (document.getElementById('btn-check-now') as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 50));
+
+        expect(document.querySelectorAll('.suggestion-card.spelling')).toHaveLength(0);
+        expect(document.querySelectorAll('.suggestion-card.grammar')).toHaveLength(1);
+      });
+
       it('SUG-1.3: checks if squiggly underlines are rendered in the overlay', async () => {
         const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
         textarea.value = 'Their was a beachh.';
@@ -184,6 +273,181 @@ describe('Inkwell E2E & Integration Test Suite', () => {
           .map((call: unknown[]) => call[0])
           .filter((message: { t?: string }) => message.t === 'cancel');
         expect(cancels).toHaveLength(1);
+      });
+
+      it('SUG-1.3c: bounds concurrent chunk requests for very long documents', async () => {
+        const connect = chrome.runtime.connect as unknown as ReturnType<typeof vi.fn>;
+        const connectImpl = connect.getMockImplementation() as
+          | ((options: { name: string }) => { postMessage: ReturnType<typeof vi.fn> })
+          | undefined;
+        expect(connectImpl).toBeTypeOf('function');
+        connect.mockImplementationOnce((options: { name: string }) => {
+          const port = connectImpl!(options);
+          port.postMessage.mockImplementation(() => undefined);
+          return port;
+        });
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = 'A useful sentence for a long document. '.repeat(900);
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1050));
+
+        const port = connect.mock.results.at(-1)?.value;
+        const checks = port.postMessage.mock.calls
+          .map((call: unknown[]) => call[0])
+          .filter((message: { t?: string }) => message.t === 'check');
+        expect(checks).toHaveLength(4);
+      });
+
+      it('SUG-1.3d: pauses a large remote-provider check until continuation is explicit', async () => {
+        chromeMock.store.set('settings', {
+          ...DEFAULT_SETTINGS,
+          dataConsentVersion: CURRENT_DATA_CONSENT_VERSION,
+          provider: {
+            ...DEFAULT_SETTINGS.provider,
+            kind: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4.1-mini',
+          },
+        });
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = 'A useful sentence for a long document. '.repeat(900);
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1150));
+
+        const connect = chrome.runtime.connect as unknown as ReturnType<typeof vi.fn>;
+        const port = connect.mock.results.at(-1)?.value;
+        const checksBeforeContinue = port.postMessage.mock.calls
+          .map((call: unknown[]) => call[0])
+          .filter((message: { t?: string }) => message.t === 'check');
+        expect(checksBeforeContinue).toHaveLength(10);
+        expect(document.querySelector('.workspace-check-paused')?.textContent).toContain(
+          'Checked sections 1 to 10',
+        );
+        expect(document.getElementById('btn-check-now')?.textContent).toBe('Continue check');
+
+        (document.getElementById('btn-check-now') as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 150));
+
+        const checksAfterContinue = port.postMessage.mock.calls
+          .map((call: unknown[]) => call[0])
+          .filter((message: { t?: string }) => message.t === 'check');
+        expect(checksAfterContinue).toHaveLength(20);
+        expect(document.querySelector('.workspace-check-paused')?.textContent).toContain(
+          'Checked sections 1 to 20',
+        );
+      });
+
+      it('SUG-1.3e: also bounds each local-model batch', async () => {
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = 'A useful sentence for a long local document. '.repeat(2500);
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1600));
+
+        const connect = chrome.runtime.connect as unknown as ReturnType<typeof vi.fn>;
+        const port = connect.mock.results.at(-1)?.value;
+        const checks = port.postMessage.mock.calls
+          .map((call: unknown[]) => call[0])
+          .filter((message: { t?: string }) => message.t === 'check');
+        expect(checks).toHaveLength(60);
+        expect(document.querySelector('.workspace-check-paused')?.textContent).toContain(
+          'Checked sections 1 to 60',
+        );
+      });
+
+      it('SUG-1.3f: a rate-limit retry resumes the current batch without losing progress', async () => {
+        chromeMock.store.set('settings', {
+          ...DEFAULT_SETTINGS,
+          dataConsentVersion: CURRENT_DATA_CONSENT_VERSION,
+          provider: {
+            ...DEFAULT_SETTINGS.provider,
+            kind: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4.1-mini',
+          },
+        });
+        const main = await import('../entrypoints/dashboard/main');
+        main.__setRateLimitCooldownForTests(10);
+        const paragraphs = Array.from({ length: 25 }, (_, index) => {
+          const lead = index === 0 ? 'Their was a problem. ' : `Section ${index + 1}. `;
+          const marker = index === 10 ? 'TRIGGER_SINGLE_RATE_LIMIT ' : '';
+          return `${lead}${marker}${'Useful context words. '.repeat(50)}`;
+        });
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = paragraphs.join('\n\n');
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        expect(document.querySelectorAll('.suggestion-card.grammar')).toHaveLength(1);
+        expect(document.querySelector('.workspace-check-paused')?.textContent).toContain(
+          'Checked sections 1 to 10',
+        );
+
+        (document.getElementById('btn-check-now') as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 350));
+
+        const connect = chrome.runtime.connect as unknown as ReturnType<typeof vi.fn>;
+        const port = connect.mock.results.at(-1)?.value;
+        const checks = port.postMessage.mock.calls
+          .map((call: unknown[]) => call[0])
+          .filter((message: { t?: string }) => message.t === 'check');
+        expect(checks.length).toBeGreaterThanOrEqual(20);
+        expect(checks.slice(10).every((message: { text: string }) => !message.text.includes('Their was')))
+          .toBe(true);
+        expect(document.querySelectorAll('.suggestion-card.grammar')).toHaveLength(1);
+        expect(document.querySelector('.workspace-check-paused')?.textContent).toContain(
+          'Checked sections 1 to 20',
+        );
+      });
+
+      it('SUG-1.3g: a manual retry cancels the armed automatic continuation', async () => {
+        chromeMock.store.set('settings', {
+          ...DEFAULT_SETTINGS,
+          dataConsentVersion: CURRENT_DATA_CONSENT_VERSION,
+          provider: {
+            ...DEFAULT_SETTINGS.provider,
+            kind: 'openai',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-4.1-mini',
+          },
+        });
+        const main = await import('../entrypoints/dashboard/main');
+        main.__setRateLimitCooldownForTests(600);
+        const paragraphs = Array.from({ length: 35 }, (_, index) => {
+          const marker = index === 10 ? 'TRIGGER_SINGLE_RATE_LIMIT ' : '';
+          return `Section ${index + 1}. ${marker}${'Useful context words. '.repeat(50)}`;
+        });
+        const textarea = document.getElementById('editor-textarea') as HTMLTextAreaElement;
+        textarea.value = paragraphs.join('\n\n');
+        textarea.dispatchEvent(new Event('input'));
+
+        await new Promise((resolve) => setTimeout(resolve, 1200));
+        (document.getElementById('btn-check-now') as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        expect(document.querySelector('.checker-error')).not.toBeNull();
+
+        (document.getElementById('btn-check-now') as HTMLButtonElement).click();
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        expect(document.querySelector('.workspace-check-paused')?.textContent).toContain(
+          'Checked sections 1 to 20',
+        );
+        const connect = chrome.runtime.connect as unknown as ReturnType<typeof vi.fn>;
+        const port = connect.mock.results.at(-1)?.value;
+        const checksAfterManualRetry = port.postMessage.mock.calls
+          .map((call: unknown[]) => call[0])
+          .filter((message: { t?: string }) => message.t === 'check');
+
+        await new Promise((resolve) => setTimeout(resolve, 650));
+
+        const checksAfterOldTimer = port.postMessage.mock.calls
+          .map((call: unknown[]) => call[0])
+          .filter((message: { t?: string }) => message.t === 'check');
+        expect(checksAfterOldTimer).toHaveLength(checksAfterManualRetry.length);
+        expect(document.querySelector('.workspace-check-paused')?.textContent).toContain(
+          'Checked sections 1 to 20',
+        );
       });
 
       it('SUG-1.4: displays and updates readability score correctly', () => {

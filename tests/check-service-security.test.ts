@@ -38,6 +38,10 @@ const SETTINGS = {
 
 const CLIENT_A: CheckClient = { id: 'client-a', origin: 'https://example.test' };
 const CLIENT_B: CheckClient = { id: 'client-b', origin: 'https://example.test' };
+const TRUSTED_DASHBOARD: CheckClient = {
+  id: 'dashboard',
+  origin: 'chrome-extension://inkwell-test',
+};
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -51,6 +55,22 @@ function deferred<T>() {
 
 async function waitForCalls(count: number): Promise<void> {
   await vi.waitFor(() => expect(mocks.complete).toHaveBeenCalledTimes(count));
+}
+
+function enqueueAndWait(
+  service: CheckService,
+  client: CheckClient,
+  index: number,
+): Promise<PortResponse> {
+  return new Promise((resolve) => {
+    service.enqueue(
+      client,
+      `request-${index}`,
+      `hash-${index}`,
+      `Clean sentence number ${index}.`,
+      resolve,
+    );
+  });
 }
 
 describe('CheckService security boundaries', () => {
@@ -157,6 +177,34 @@ describe('CheckService security boundaries', () => {
     expect(responsesA[1]).toEqual(expect.objectContaining({ t: 'error', code: 'rate_limit' }));
     await vi.waitFor(() => expect(responsesB).toHaveLength(1));
     expect(responsesB[0]?.t).toBe('result');
+  });
+
+  it('lets the trusted extension dashboard drain more than 90 document chunks', async () => {
+    const service = new CheckService(() => undefined);
+
+    for (let index = 0; index < 100; index++) {
+      await expect(enqueueAndWait(service, TRUSTED_DASHBOARD, index)).resolves.toMatchObject({
+        t: 'result',
+      });
+    }
+
+    expect(mocks.complete).toHaveBeenCalledTimes(100);
+  });
+
+  it('keeps the default 90-request ceiling for untrusted web origins', async () => {
+    const service = new CheckService(() => undefined);
+
+    for (let index = 0; index < 90; index++) {
+      await expect(enqueueAndWait(service, CLIENT_A, index)).resolves.toMatchObject({
+        t: 'result',
+      });
+    }
+    await expect(enqueueAndWait(service, CLIENT_A, 90)).resolves.toMatchObject({
+      t: 'error',
+      code: 'rate_limit',
+    });
+
+    expect(mocks.complete).toHaveBeenCalledTimes(90);
   });
 
   it('shares request and text budgets across clients from the same origin', async () => {

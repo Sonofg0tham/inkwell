@@ -203,10 +203,11 @@ export class SuggestionCard {
     if (top + rect.height > window.innerHeight - VIEWPORT_MARGIN) {
       top = anchor.top - rect.height - GAP;
     }
-    const left = Math.min(
-      Math.max(anchor.left, VIEWPORT_MARGIN),
+    const maxLeft = Math.max(
+      VIEWPORT_MARGIN,
       window.innerWidth - rect.width - VIEWPORT_MARGIN,
     );
+    const left = Math.min(Math.max(anchor.left, VIEWPORT_MARGIN), maxLeft);
     card.style.top = `${Math.max(top, VIEWPORT_MARGIN)}px`;
     card.style.left = `${left}px`;
 

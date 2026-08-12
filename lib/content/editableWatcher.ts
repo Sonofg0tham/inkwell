@@ -69,8 +69,24 @@ export function startWatcher(env: FieldEnv): WatcherHandle {
     deactivateActive();
   };
 
+  const onEditableInput = (event: Event): void => {
+    if (!activeController || !activeElement) return;
+    const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
+    const origin = path[0] ?? event.target;
+    if (!(origin instanceof Element)) return;
+    const belongsToActive = origin === activeElement || activeElement.contains(origin);
+    if (!belongsToActive) return;
+
+    // SPAs often reuse one focused node and mutate its autocomplete, role,
+    // spellcheck or code-editor ancestry. Recheck before the controller's
+    // target-phase listener can send newly sensitive text to a provider.
+    if (resolveEditable(origin)?.el !== activeElement) deactivateActive();
+  };
+
   document.addEventListener('focusin', onFocusIn, true);
   document.addEventListener('focusout', onFocusOut, true);
+  document.addEventListener('beforeinput', onEditableInput, true);
+  document.addEventListener('input', onEditableInput, true);
   // A field may already be focused when the watcher starts. document.activeElement
   // is retargeted too, so descend through any open shadow roots to the real one.
   if (document.activeElement) attach(deepActiveElement());
@@ -80,6 +96,8 @@ export function startWatcher(env: FieldEnv): WatcherHandle {
     stop: () => {
       document.removeEventListener('focusin', onFocusIn, true);
       document.removeEventListener('focusout', onFocusOut, true);
+      document.removeEventListener('beforeinput', onEditableInput, true);
+      document.removeEventListener('input', onEditableInput, true);
       deactivateActive();
       destroyOverlayHost();
     },

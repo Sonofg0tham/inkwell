@@ -61,22 +61,47 @@ function splitLongParagraph(text: string, docOffset: number, dialect: string): C
 }
 
 /**
- * Splits document text into paragraph chunks (further split at sentence
- * boundaries when long). Skips chunks that are too short or letterless.
+ * Coalesces short paragraphs into bounded document slices (further split at
+ * sentence boundaries when long). Short or letterless paragraphs never start
+ * a chunk, but can remain between checked paragraphs as context.
  * Synchronous by design — hashing must work on plain-http pages too.
  */
 export function chunkText(text: string, dialect: string): Chunk[] {
   const chunks: Chunk[] = [];
+  let pendingStart: number | null = null;
+  let pendingEnd = 0;
+  const flushPending = (): void => {
+    if (pendingStart === null) return;
+    const piece = text.slice(pendingStart, pendingEnd);
+    chunks.push({ text: piece, docOffset: pendingStart, hash: fnvHash(piece) });
+    pendingStart = null;
+    pendingEnd = 0;
+  };
   const re = /[^\n]+/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(text)) !== null) {
     const para = m[0];
-    if (para.length < MIN_CHUNK_CHARS || !HAS_LETTER.test(para)) continue;
-    if (para.length <= MAX_CHUNK_CHARS) {
-      chunks.push({ text: para, docOffset: m.index, hash: fnvHash(para) });
-    } else {
+    if (para.length < MIN_CHUNK_CHARS || !HAS_LETTER.test(para)) {
+      continue;
+    }
+    if (para.length > MAX_CHUNK_CHARS) {
+      flushPending();
       chunks.push(...splitLongParagraph(para, m.index, dialect));
+      continue;
+    }
+
+    const paraEnd = m.index + para.length;
+    if (pendingStart === null) {
+      pendingStart = m.index;
+      pendingEnd = paraEnd;
+    } else if (paraEnd - pendingStart <= MAX_CHUNK_CHARS) {
+      pendingEnd = paraEnd;
+    } else {
+      flushPending();
+      pendingStart = m.index;
+      pendingEnd = paraEnd;
     }
   }
+  flushPending();
   return chunks;
 }

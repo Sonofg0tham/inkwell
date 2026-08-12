@@ -58,6 +58,13 @@ export function validateProviderEndpoint(
     throw new ProviderEndpointError('The server address must not contain a query string or fragment.');
   }
 
+  const baseUrl = canonicalBaseUrl(url);
+  if (CLOUD_KINDS.includes(kind) && baseUrl !== canonicalDefault(kind)) {
+    throw new ProviderEndpointError(
+      'Built-in cloud providers are locked to their official endpoint. Choose LM Studio / OpenAI-compatible for a custom server.',
+    );
+  }
+
   const isLoopback = isLoopbackHostname(url.hostname);
   if (url.protocol === 'http:' && !isLoopback) {
     throw new ProviderEndpointError(
@@ -72,7 +79,6 @@ export function validateProviderEndpoint(
     );
   }
 
-  const baseUrl = canonicalBaseUrl(url);
   // These are the only provider origins retained as required manifest access.
   // Other loopback forms are safe to use, but still need their exact runtime
   // grant because Chrome match patterns do not cover them implicitly.

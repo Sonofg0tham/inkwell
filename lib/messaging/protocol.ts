@@ -55,6 +55,12 @@ export type ContentBroadcast = {
   settings: Settings;
 };
 
+export interface ContentSettingsResponse {
+  settings: Settings;
+  /** Trusted top-level tab hostname, resolved by the background service. */
+  siteHost: string | null;
+}
+
 // ---------------------------------------------------------------------------
 // One-shot messages (chrome.runtime.sendMessage) — control plane
 // ---------------------------------------------------------------------------
@@ -86,7 +92,7 @@ export type ModelsResult =
 
 export interface OneShotResponseMap {
   getTabState: TabState;
-  getContentSettings: Settings;
+  getContentSettings: ContentSettingsResponse;
   addPersonalDictionaryWord: { ok: true; added: boolean };
   testConnection: ConnectionResult;
   listModels: ModelsResult;

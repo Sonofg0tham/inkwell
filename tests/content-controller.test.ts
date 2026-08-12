@@ -134,6 +134,31 @@ describe('FieldController lifecycle', () => {
     );
   });
 
+  it('sends no text if the field becomes sensitive after its input event', async () => {
+    const runtime = setup('Private text that must not leave this field.');
+    runtime.controller.activate();
+    runtime.input(true);
+    runtime.field.setAttribute('autocomplete', 'username');
+
+    await vi.advanceTimersByTimeAsync(801);
+
+    expect(runtime.port.check).not.toHaveBeenCalled();
+  });
+
+  it('sends no text if an ancestor opts out after the field input event', async () => {
+    const runtime = setup('Private text that must not leave this editor.');
+    runtime.controller.activate();
+    runtime.input(true);
+    const wrapper = document.createElement('div');
+    runtime.field.replaceWith(wrapper);
+    wrapper.append(runtime.field);
+    wrapper.setAttribute('data-inkwell-disable', '');
+
+    await vi.advanceTimersByTimeAsync(801);
+
+    expect(runtime.port.check).not.toHaveBeenCalled();
+  });
+
   it('cancels old work and rechecks immediately when checking settings change', async () => {
     const runtime = setup();
     runtime.controller.activate();
@@ -150,11 +175,18 @@ describe('FieldController lifecycle', () => {
     expect(runtime.port.check.mock.calls[1]![0]).not.toBe(firstRequestId);
   });
 
-  it('reports zero when the active field is deactivated', () => {
+  it('reports zero and clears visible status when the active field is deactivated', async () => {
     const runtime = setup();
     runtime.controller.activate();
+    runtime.input(true);
+    await vi.advanceTimersByTimeAsync(801);
+    expect(getOverlayHost().statusLayer.hidden).toBe(false);
+
     runtime.controller.deactivate();
+
     expect(runtime.reportCount).toHaveBeenLastCalledWith(0);
+    expect(getOverlayHost().statusLayer.hidden).toBe(true);
+    expect(getOverlayHost().statusLayer.textContent).toBe('');
   });
 
   it('shows checking and provider failure states beside the active field', async () => {

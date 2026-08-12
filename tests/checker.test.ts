@@ -289,21 +289,19 @@ describe('strict JSON schema conversion', () => {
 });
 
 describe('chunkText', () => {
-  it('splits paragraphs with correct document offsets', () => {
+  it('coalesces adjacent short paragraphs with correct document offsets', () => {
     const text = 'First paragraph here.\n\nSecond paragraph follows it.';
     const chunks = chunkText(text, 'en-GB');
-    expect(chunks).toHaveLength(2);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0]!.text).toBe(text);
     for (const chunk of chunks) {
       expect(text.slice(chunk.docOffset, chunk.docOffset + chunk.text.length)).toBe(chunk.text);
     }
   });
 
-  it('checks short words while still skipping single letters and letterless chunks', () => {
-    const chunks = chunkText('teh\n\nok\n\nI\n\n12345 67890 123\n\nA real paragraph of text.', 'en-GB');
-    expect(chunks.map((chunk) => chunk.text)).toEqual([
-      'teh',
-      'A real paragraph of text.',
-    ]);
+  it('checks three-letter words while skipping documents with only shorter or letterless lines', () => {
+    expect(chunkText('teh', 'en-GB').map((chunk) => chunk.text)).toEqual(['teh']);
+    expect(chunkText('ok\n\nI\n\n12345 67890 123', 'en-GB')).toEqual([]);
   });
 
   it('splits long paragraphs at sentence boundaries under the cap', () => {
@@ -323,6 +321,43 @@ describe('chunkText', () => {
     expect(chunks.length).toBeGreaterThan(1);
     expect(chunks.every((chunk) => chunk.text.length <= 1200)).toBe(true);
     expect(chunks.map((chunk) => chunk.text).join('')).toBe(text);
+  });
+
+  it('coalesces a near-400k short-line document into whole-paragraph chunks that can drain', () => {
+    const text = Array.from(
+      { length: 66_666 },
+      (_, index) => `w${index.toString(36).padStart(4, '0')}`,
+    ).join('\n');
+    expect(text).toHaveLength(399_995);
+
+    const chunks = chunkText(text, 'en-GB');
+
+    // Two hundred five-character lines plus their separators fit under 1,200.
+    expect(chunks).toHaveLength(334);
+    for (const chunk of chunks) {
+      const end = chunk.docOffset + chunk.text.length;
+      expect(chunk.text.length).toBeLessThanOrEqual(1200);
+      expect(text.slice(chunk.docOffset, end)).toBe(chunk.text);
+      expect(chunk.docOffset === 0 || text[chunk.docOffset - 1] === '\n').toBe(true);
+      expect(end === text.length || text[end] === '\n').toBe(true);
+    }
+  });
+
+  it('keeps ignored lines as context without multiplying near-400k chunk counts', () => {
+    const text = 'abc\n1\n'.repeat(66_666);
+    expect(text).toHaveLength(399_996);
+
+    const chunks = chunkText(text, 'en-GB');
+
+    expect(chunks).toHaveLength(334);
+    expect(chunks[0]!.text).toContain('\n1\n');
+    for (const chunk of chunks) {
+      const end = chunk.docOffset + chunk.text.length;
+      expect(chunk.text.length).toBeLessThanOrEqual(1200);
+      expect(text.slice(chunk.docOffset, end)).toBe(chunk.text);
+      expect(chunk.docOffset === 0 || text[chunk.docOffset - 1] === '\n').toBe(true);
+      expect(end === text.length || text[end] === '\n').toBe(true);
+    }
   });
 
   it('produces stable hashes', () => {

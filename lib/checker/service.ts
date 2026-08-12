@@ -98,6 +98,14 @@ interface BudgetWindow {
   chars: number;
 }
 
+function isTrustedExtensionClient(client: CheckClient): boolean {
+  try {
+    return new URL(client.origin ?? '').protocol === 'chrome-extension:';
+  } catch {
+    return false;
+  }
+}
+
 export class CheckService {
   private queue: QueueItem[] = [];
   // A Set tracks the actual work items. Keying this by a caller-supplied ID
@@ -236,6 +244,12 @@ export class CheckService {
   }
 
   private consumeBudget(client: CheckClient, chars: number): string | null {
+    // CheckClient identity and origin are created by the background worker,
+    // never accepted from page code. The document workspace still goes
+    // through request-size, pending-work and global concurrency limits, but it
+    // must be able to drain documents larger than a web editor's abuse budget.
+    if (isTrustedExtensionClient(client)) return null;
+
     const now = this.now();
     const clientWindow = this.currentBudget(this.clientBudgets, client.id, now);
     const originWindow = client.origin
@@ -359,7 +373,13 @@ export class CheckService {
         return;
       }
       const parsed = parseIssuesDetailed(responseText);
-      const anchored = anchorIssues(item.text, parsed.issues, settings.categories);
+      // Standard mode promises clear errors only. Enforce that boundary after
+      // parsing so a model cannot surface style suggestions by ignoring the prompt.
+      const effectiveCategories =
+        settings.strictness === 'standard'
+          ? { ...settings.categories, style: false }
+          : settings.categories;
+      const anchored = anchorIssues(item.text, parsed.issues, effectiveCategories);
       const issues = mergeLocalSpellingIssues(
         localIssues,
         filterPersonalDictionaryIssues(anchored.issues, settings),
