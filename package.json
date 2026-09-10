@@ -33,7 +33,7 @@
     "@types/chrome": "^0.0.280",
     "happy-dom": "^20.10.6",
     "typescript": "~5.8.3",
-    "vitest": "^4.1.10",
+    "vitest": "^4.1.11",
     "wxt": "0.21.2"
   },
   "overrides": {
