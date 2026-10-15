@@ -30,21 +30,72 @@ function correctedType(raw: RawIssue, settings: Settings): IssueType {
   return bare(raw.original) === bare(raw.replacement) ? 'punctuation' : 'grammar';
 }
 
+const ARTICLES = new Set(['a', 'an', 'the']);
+const MALE = new Set(['he', 'him', 'his', 'himself']);
+const FEMALE = new Set(['she', 'her', 'hers', 'herself']);
+
+function lowerWords(text: string): string[] {
+  return (text.match(new RegExp(WORD_SOURCE, 'gu')) ?? []).map((word) =>
+    word.replaceAll('’', "'").toLocaleLowerCase('en'),
+  );
+}
+
+function isSubsequence(short: string[], long: string[]): boolean {
+  let index = 0;
+  for (const word of long) if (word === short[index]) index++;
+  return index === short.length;
+}
+
 /**
- * Reviews parsed model issues before they are placed in the text: drops a
- * "correction" that swaps a spelling the writer's dialect accepts for another
- * region's form (colour to color in British English), and relabels real-word
- * mistakes that the model called spelling.
+ * Fixes that make the writing worse in ways small models often get wrong.
+ * Each one either changes the meaning or swaps a correct form for an
+ * incorrect one, so it is dropped rather than repaired.
+ */
+function makesWritingWorse(raw: RawIssue, settings: Settings): boolean {
+  const before = lowerWords(raw.original);
+  const after = lowerWords(raw.replacement);
+  const count = (words: string[], set: ReadonlySet<string>) =>
+    words.filter((word) => set.has(word)).length;
+
+  // colour to color for someone writing British English.
+  if (knowsEveryWord(raw.original, settings) && otherDialectWords(raw.replacement, settings).length > 0) {
+    return true;
+  }
+  // "Your the" to "You're" silently deletes the article the span ends on.
+  // Plain deletions such as "the the" to "the", and rewrites that keep an
+  // article at the end, are kept.
+  const lastBefore = before.at(-1);
+  const lastAfter = after.at(-1);
+  if (
+    lastBefore !== undefined &&
+    ARTICLES.has(lastBefore) &&
+    !(lastAfter !== undefined && ARTICLES.has(lastAfter)) &&
+    !isSubsequence(after, before)
+  ) {
+    return true;
+  }
+  // "than her" to "than his" changes who the sentence is about.
+  const genderSwap =
+    (count(before, FEMALE) > count(after, FEMALE) && count(after, MALE) > count(before, MALE)) ||
+    (count(before, MALE) > count(after, MALE) && count(after, FEMALE) > count(before, FEMALE));
+  if (genderSwap) return true;
+  // "fewer people" is already right.
+  if (before.includes('fewer') && !after.includes('fewer') && after.includes('less')) return true;
+  // "I and him" is never the fix for "me and him".
+  return /\bI and (?:he|she|they|him|her|them)\b/u.test(raw.replacement) &&
+    !/\bI and (?:he|she|they|him|her|them)\b/u.test(raw.original);
+}
+
+/**
+ * Reviews parsed model issues before they are placed in the text: drops
+ * fixes that would make the writing worse, such as swapping a spelling the
+ * writer's dialect accepts for another region's form (colour to color in
+ * British English), and relabels real-word mistakes the model called spelling.
  */
 export function reviewModelIssues(issues: RawIssue[], settings: Settings): RawIssue[] {
   const reviewed: RawIssue[] = [];
   for (const raw of issues) {
-    if (
-      knowsEveryWord(raw.original, settings) &&
-      otherDialectWords(raw.replacement, settings).length > 0
-    ) {
-      continue;
-    }
+    if (makesWritingWorse(raw, settings)) continue;
     reviewed.push({ ...raw, type: correctedType(raw, settings) });
   }
   return reviewed;
@@ -64,14 +115,28 @@ function asDeletion(text: string, issue: IssueDto): IssueDto {
 }
 
 /**
- * Models sometimes quote a short span but write a fix that repeats the word
- * next to it, so applying "discussed about" -> "discussed the" before "the
- * plan" would give "discussed the the plan". Trims the repeated word from the
- * fix, or drops the issue when nothing would be left to change.
+ * "then" to "than" needs something to compare with, so "We were happier
+ * then." is left alone, as the offline rule does.
  */
-export function avoidRepeatedWords(text: string, issues: IssueDto[]): IssueDto[] {
+function comparesNothing(text: string, issue: IssueDto): boolean {
+  return (
+    LAST_WORD.exec(issue.original)?.[1]?.toLocaleLowerCase('en') === 'then' &&
+    LAST_WORD.exec(issue.replacement)?.[1]?.toLocaleLowerCase('en') === 'than' &&
+    /^\s*(?:[^\p{L}\p{N}\s]|$)/u.test(text.slice(issue.end))
+  );
+}
+
+/**
+ * Reviews model issues once they are placed in the text. Models sometimes
+ * quote a short span but write a fix that repeats the word next to it, so
+ * applying "discussed about" -> "discussed the" before "the plan" would give
+ * "discussed the the plan". The repeated word is trimmed from the fix, or the
+ * issue is dropped when nothing would be left to change.
+ */
+export function reviewPlacedIssues(text: string, issues: IssueDto[]): IssueDto[] {
   const kept: IssueDto[] = [];
   for (const issue of issues) {
+    if (comparesNothing(text, issue)) continue;
     let replacement = issue.replacement;
 
     const next = NEXT_WORD.exec(text.slice(issue.end));

@@ -1,5 +1,5 @@
 import { anchorIssues } from '../checker/anchor';
-import { avoidRepeatedWords, reviewModelIssues } from '../checker/modelReview';
+import { reviewPlacedIssues, reviewModelIssues } from '../checker/modelReview';
 import { buildMessages } from '../checker/prompt';
 import { extractJson, ISSUE_JSON_SCHEMA, parseIssuesDetailed } from '../checker/schema';
 import type { Settings } from '../settings/schema';
@@ -106,7 +106,7 @@ async function runProbe(
       'Connected, but the model quoted text Inkwell could not locate in its test passage. Choose a stronger instruct model.',
     );
   }
-  return { ok: true, issues: avoidRepeatedWords(passage, anchored.issues) };
+  return { ok: true, issues: reviewPlacedIssues(passage, anchored.issues) };
 }
 
 /**

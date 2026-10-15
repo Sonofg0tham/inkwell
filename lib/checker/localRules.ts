@@ -116,6 +116,26 @@ const SILENT_H = /^(?:hour|hours|hourly|honest|honestly|honesty|honour|honours|h
 const CONSONANT_SOUND_U = /^(?:unique|university|universities|universal|user|users|useful|usual|usually|union|unions|uniform|unit|units|united|utility|usage|unicorn|euro|euros|european|one|once)$/iu;
 const COMPARATIVES =
   'better|worse|more|less|greater|bigger|smaller|larger|faster|slower|higher|lower|taller|shorter|older|younger|cheaper|easier|harder|stronger|weaker|richer|poorer|other';
+// Comparatives and superlatives that never take "more" or "most" as well.
+const ER_FORMS =
+  'better|worse|bigger|smaller|smarter|faster|slower|easier|harder|happier|taller|shorter|older|younger|cheaper|stronger|weaker|richer|poorer|larger|greater|higher|longer|quicker|nicer|safer|simpler|louder|quieter|warmer|colder|hotter|wider|deeper|heavier|busier|funnier|prettier|healthier|friendlier|luckier|newer';
+const EST_FORMS =
+  'best|worst|biggest|smallest|smartest|fastest|slowest|easiest|hardest|happiest|tallest|shortest|oldest|youngest|cheapest|strongest|weakest|richest|poorest|largest|greatest|highest|longest|quickest|nicest|safest|simplest|loudest|quietest|warmest|coldest|hottest|widest|deepest|heaviest|busiest|funniest|prettiest|healthiest|friendliest|luckiest|newest|kindest';
+// Plural nouns that are always counted, so take "fewer" rather than "less".
+const COUNT_NOUNS =
+  'people|friends|things|items|words|mistakes|errors|cars|days|weeks|months|years|hours|minutes|times|calories|questions|options|choices|students|children|members|employees|jobs|problems|issues|emails|messages|books|games|players|customers|users|visitors|cases|bugs|steps|pages';
+const LEND_FORMS: Readonly<Record<string, string>> = {
+  borrow: 'lend',
+  borrows: 'lends',
+  borrowed: 'lent',
+  borrowing: 'lending',
+};
+const SUBJECT_FORMS: Readonly<Record<string, string>> = { him: 'He', her: 'She', them: 'They' };
+const SENTENCE_START = String.raw`(?:^|(?<=[.!?]\s+|\n))`;
+// "Me and him" or "Him and me" used as the subject of a sentence.
+const OBJECT_PAIR = String.raw`Me\s+and\s+(?:him|her|them|\p{Lu}\p{Ll}+)|(?:Him|Her|Them)\s+and\s+me`;
+const SUBJECT_VERBS =
+  'was|were|are|is|went|have|had|has|will|would|can|could|should|did|do|got|go|made|saw|met|played|left|came|walked|bought|found|took';
 
 /**
  * Rules for mistakes that can be corrected without guessing at the writer's
@@ -154,6 +174,11 @@ export function findLocalRuleIssues(text: string, settings: Settings): IssueDto[
       'Use “there” in this construction.');
     each('grammar', wordPattern(String.raw`(your)(?=\s+(?:welcome\s*(?:[.!,;]|$)|welcome\s+to\s+(?!(?:the|our|my|this|your|their)${WORD_AFTER})|(?:going\s+to|gonna|not)${WORD_AFTER}))`),
       () => "you're", 'Use the contraction for “you are”.');
+    // A possessive never comes straight before an article: "Your the best".
+    each('grammar', new RegExp(String.raw`${WORD_BEFORE}([yY]our)(?=\s+(?:the|an?)\s+\p{L})`, 'gu'),
+      () => "you're", 'Use the contraction for “you are”.');
+    each('grammar', wordPattern(String.raw`(their)(?=\s+(?:going\s+to|gonna)${WORD_AFTER})`), () => "they're",
+      'Use the contraction for “they are”.');
     each('grammar', wordPattern(String.raw`(?:could|should|would|might|must)\s+(of)`), () => 'have',
       'Use “have” after a modal verb.');
 
@@ -201,6 +226,25 @@ export function findLocalRuleIssues(text: string, settings: Settings): IssueDto[
       'Use “don’t” with I, you, we or they.');
     each('grammar', wordPattern(String.raw`(?:we|they|you)\s+(was)`), () => 'were',
       'Use “were” with we, you or they.');
+    // "Me and him went" at the start of a sentence: the subject takes "I",
+    // which goes last, and two people take "were".
+    each('grammar', new RegExp(String.raw`${SENTENCE_START}(${OBJECT_PAIR})(?=\s+(?:${SUBJECT_VERBS})${WORD_AFTER})`, 'gu'),
+      (original) => {
+        const words = original.split(/\s+/u);
+        const other = words[0]!.toLocaleLowerCase('en') === 'me' ? words[2]! : words[0]!;
+        return `${SUBJECT_FORMS[other.toLocaleLowerCase('en')] ?? other} and I`;
+      }, 'Use “I” as part of the subject, and put yourself last.');
+    each('grammar', new RegExp(String.raw`${SENTENCE_START}(?:${OBJECT_PAIR}|(?:He|She|They|\p{Lu}\p{Ll}+)\s+and\s+I)\s+(was)${WORD_AFTER}`, 'gu'),
+      () => 'were', 'Use “were” with two or more people.');
+
+    // "more smarter", "most best".
+    each('grammar', wordPattern(String.raw`(more\s+(?:${ER_FORMS})(?=\s+(?:than|to)${WORD_AFTER}|\s*[.,;:!?]|\s*$)|most\s+(?:${EST_FORMS})(?!-))`),
+      (original) => original.split(/\s+/u).at(-1)!, 'Use “more” or the “-er” form, not both.');
+    each('grammar', wordPattern(String.raw`(?<!(?:or|no|much)\s+)(less)(?=\s+(?:${COUNT_NOUNS})${WORD_AFTER}(?!-))`),
+      () => 'fewer', 'Use “fewer” for things you can count.');
+    each('grammar', wordPattern(String.raw`(borrow(?:s|ed|ing)?)(?=\s+(?:me|him|her|us|them)\s+(?:a|an|the|some|any|my|your|his|her|our|their|this|that|\p{N}+)${WORD_AFTER})`),
+      (original) => LEND_FORMS[original.toLocaleLowerCase('en')] ?? null,
+      'Use “lend” for giving something to someone.');
 
     // Common confusions with a fixed, unambiguous context.
     each('grammar', wordPattern(String.raw`(?:${COMPARATIVES})\s+(then)(?=\s+\p{L})(?!\s+(?:${COMPARATIVES}|again|later|after|before\s+\p{L}))`),

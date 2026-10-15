@@ -14,7 +14,7 @@ import {
   mergeLocalSpellingIssues,
 } from './localSpelling';
 import { findLocalRuleIssues } from './localRules';
-import { avoidRepeatedWords, reviewModelIssues } from './modelReview';
+import { reviewPlacedIssues, reviewModelIssues } from './modelReview';
 import { buildMessages } from './prompt';
 import { ISSUE_JSON_SCHEMA, parseIssuesDetailed } from './schema';
 
@@ -391,7 +391,7 @@ export class CheckService {
       );
       const issues = mergeLocalSpellingIssues(
         localIssues,
-        filterPersonalDictionaryIssues(avoidRepeatedWords(item.text, anchored.issues), settings),
+        filterPersonalDictionaryIssues(reviewPlacedIssues(item.text, anchored.issues), settings),
       );
       // Malformed items and unplaceable items are both "the model found
       // something we can't show you" — they must reach the UI the same way.

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { IssueDto } from '../lib/messaging/protocol';
-import { avoidRepeatedWords, reviewModelIssues } from '../lib/checker/modelReview';
+import { reviewPlacedIssues, reviewModelIssues } from '../lib/checker/modelReview';
 import type { RawIssue } from '../lib/checker/schema';
 import { DEFAULT_SETTINGS, settingsSchema, type Settings } from '../lib/settings/schema';
 
@@ -83,29 +83,60 @@ describe('regional spelling swaps', () => {
   });
 });
 
+describe('fixes that make the writing worse', () => {
+  it.each([
+    ['Your the', "You're"],
+    ['less friends than her', 'fewer friends than his'],
+    ['Fewer', 'Less'],
+    ['Me and him', 'I and him'],
+  ] as const)('drops a change from %j to %j', (original, replacement) => {
+    expect(reviewModelIssues([raw('grammar', original, replacement)], DEFAULT_SETTINGS)).toEqual([]);
+  });
+
+  it.each([
+    ['a apple', 'an apple'],
+    ['a', 'an'],
+    ['Due to the fact that', 'Because'],
+    ['the the', 'the'],
+    ['went to the home', 'went home'],
+    ['than her', 'than she'],
+    ['less friends', 'fewer friends'],
+    ['Me and him', 'He and I'],
+  ] as const)('keeps a change from %j to %j', (original, replacement) => {
+    expect(reviewModelIssues([raw('grammar', original, replacement)], DEFAULT_SETTINGS)).toHaveLength(1);
+  });
+
+  it('drops "then" to "than" when nothing follows to compare with', () => {
+    const ended = 'We were happier then.';
+    const compared = 'We were happier then before.';
+    expect(reviewPlacedIssues(ended, [located(ended, 'then', 'than')])).toEqual([]);
+    expect(reviewPlacedIssues(compared, [located(compared, 'then', 'than')])).toHaveLength(1);
+  });
+});
+
 describe('repeated words in model fixes', () => {
   it('trims a word the fix repeats from the text after it', () => {
     const text = 'We discussed about the plan.';
-    const issues = avoidRepeatedWords(text, [located(text, 'discussed about', 'discussed the')]);
+    const issues = reviewPlacedIssues(text, [located(text, 'discussed about', 'discussed the')]);
     expect(apply(text, issues)).toBe('We discussed the plan.');
   });
 
   it('turns a fix that only repeats the next word into a clean deletion', () => {
     const text = 'We discussed about the plan.';
-    const issues = avoidRepeatedWords(text, [located(text, 'about', 'the')]);
+    const issues = reviewPlacedIssues(text, [located(text, 'about', 'the')]);
     expect(issues[0]?.original).toBe(' about');
     expect(apply(text, issues)).toBe('We discussed the plan.');
   });
 
   it('trims a word the fix repeats from the text before it', () => {
     const text = 'He wants to going home.';
-    const issues = avoidRepeatedWords(text, [located(text, 'going', 'to go')]);
+    const issues = reviewPlacedIssues(text, [located(text, 'going', 'to go')]);
     expect(apply(text, issues)).toBe('He wants to go home.');
   });
 
   it('drops a fix that changes nothing once the repeat is trimmed', () => {
     const text = 'We discussed the plan.';
-    expect(avoidRepeatedWords(text, [located(text, 'discussed', 'discussed the')])).toEqual([]);
+    expect(reviewPlacedIssues(text, [located(text, 'discussed', 'discussed the')])).toEqual([]);
   });
 
   it('leaves correct repeats, existing repeats and ordinary fixes alone', () => {
@@ -117,7 +148,7 @@ describe('repeated words in model fixes', () => {
       [existing, located(existing, 'the shop', 'the store')],
       [ordinary, located(ordinary, 'She walk', 'She walks')],
     ] as const) {
-      expect(avoidRepeatedWords(text, [issue])).toEqual([issue]);
+      expect(reviewPlacedIssues(text, [issue])).toEqual([issue]);
     }
   });
 });
