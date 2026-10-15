@@ -138,6 +138,38 @@ describe('editable privacy policy', () => {
     expect(activate).not.toHaveBeenCalled();
   });
 
+  it.each(['mce-content-body', 'cke_editable'])(
+    'still checks a %s rich-text editor that turns native spellcheck off by default',
+    (className) => {
+      const activate = vi.spyOn(FieldController.prototype, 'activate');
+      const editor = document.createElement('div');
+      editor.contentEditable = 'true';
+      editor.className = className;
+      editor.setAttribute('spellcheck', 'false');
+      document.body.append(editor);
+      start();
+
+      dispatchFocus('focusin', editor, editor);
+
+      expect(activate).toHaveBeenCalledOnce();
+    },
+  );
+
+  it('still skips a sensitive field inside a TinyMCE editor', () => {
+    const activate = vi.spyOn(FieldController.prototype, 'activate');
+    const editor = document.createElement('div');
+    editor.contentEditable = 'true';
+    editor.className = 'mce-content-body';
+    editor.setAttribute('spellcheck', 'false');
+    editor.setAttribute('aria-label', 'Password');
+    document.body.append(editor);
+    start();
+
+    dispatchFocus('focusin', editor, editor);
+
+    expect(activate).not.toHaveBeenCalled();
+  });
+
   it('honours a nearer spellcheck=true override on the editor', () => {
     const activate = vi.spyOn(FieldController.prototype, 'activate');
     const wrapper = document.createElement('div');
