@@ -259,6 +259,59 @@ function getSpeller(dialect: Dialect): SpellChecker {
   return checker;
 }
 
+// Dictionaries to compare against when a model swaps in another region's
+// spelling. Canadian English mixes British and American forms, so it checks both.
+const OTHER_DIALECTS: Readonly<Record<Dialect, readonly Dialect[]>> = {
+  'en-US': ['en-GB'],
+  'en-GB': ['en-US'],
+  'en-CA': ['en-US', 'en-GB'],
+  'en-AU': ['en-US'],
+  'en-IN': ['en-US'],
+};
+
+/** Words in `text`, with hyphenated compounds split, ready for a dictionary. */
+function dictionaryWords(text: string): string[] {
+  return [...text.matchAll(WORD)].flatMap((match) =>
+    match[0].replaceAll('’', "'").split('-').filter(Boolean),
+  );
+}
+
+/**
+ * Acronyms, mixed-case product names and non-English letters are outside what
+ * an English dictionary can judge, so they count as known.
+ */
+function outsideDictionary(word: string): boolean {
+  return (
+    /[^\x00-\x7F]/.test(word) ||
+    (word.length > 1 && word === word.toLocaleUpperCase('en')) ||
+    isMixedCase(word)
+  );
+}
+
+function knownWord(word: string, dialect: Dialect, personal: ReadonlySet<string>): boolean {
+  if (personal.has(normalisePersonalWord(word)) || outsideDictionary(word)) return true;
+  return getSpeller(dialect).correct(word);
+}
+
+/** True when the writer's dictionary, or their personal one, knows every word in `text`. */
+export function knowsEveryWord(text: string, settings: Settings): boolean {
+  const personal = new Set((settings.personalDictionary ?? []).map(normalisePersonalWord));
+  return dictionaryWords(text).every((word) => knownWord(word, settings.dialect, personal));
+}
+
+/**
+ * Words the writer's dialect rejects but another major English dictionary
+ * accepts, such as "color" for someone writing British English.
+ */
+export function otherDialectWords(text: string, settings: Settings): string[] {
+  const personal = new Set((settings.personalDictionary ?? []).map(normalisePersonalWord));
+  return dictionaryWords(text).filter(
+    (word) =>
+      !knownWord(word, settings.dialect, personal) &&
+      OTHER_DIALECTS[settings.dialect].some((other) => getSpeller(other).correct(word)),
+  );
+}
+
 function collectPatternRanges(
   text: string,
   pattern: RegExp,
@@ -418,14 +471,15 @@ function normalisePersonalWord(word: string): string {
 }
 
 /** A model does not get to override the user's explicit dictionary choice. */
-export function filterPersonalDictionaryIssues(
-  issues: IssueDto[],
+export function filterPersonalDictionaryIssues<T extends Pick<IssueDto, 'type' | 'original'>>(
+  issues: T[],
   settings: Settings,
-): IssueDto[] {
+): T[] {
   const personal = new Set((settings.personalDictionary ?? []).map(normalisePersonalWord));
   if (personal.size === 0) return issues;
   return issues.filter(
-    (issue) => issue.type !== 'spelling' || !personal.has(normalisePersonalWord(issue.original)),
+    (issue) =>
+      issue.type !== 'spelling' || !personal.has(normalisePersonalWord(issue.original.trim())),
   );
 }
 

@@ -211,6 +211,37 @@ describe('deterministic local spelling', () => {
     ]);
   });
 
+  it('reviews model fixes before showing them', async () => {
+    const issues = await check(
+      'The colour changed. We discussed about the plan. She walk home.',
+      DEFAULT_SETTINGS,
+      [
+        { type: 'spelling', original: 'colour', replacement: 'color', explanation: 'Spelling.' },
+        {
+          type: 'grammar',
+          original: 'discussed about',
+          replacement: 'discussed the',
+          explanation: 'Remove "about".',
+        },
+        { type: 'spelling', original: 'She walk', replacement: 'She walks', explanation: 'Agreement.' },
+      ],
+    );
+
+    expect(issues).toEqual([
+      expect.objectContaining({ original: 'discussed about', replacement: 'discussed' }),
+      expect.objectContaining({ type: 'grammar', original: 'She walk', replacement: 'She walks' }),
+    ]);
+  });
+
+  it('applies category switches to the corrected label', async () => {
+    const settings = settingsSchema.parse({ categories: { grammar: false } });
+    const issues = await check('She walk home.', settings, [
+      { type: 'spelling', original: 'She walk', replacement: 'She walks', explanation: 'Agreement.' },
+    ]);
+
+    expect(issues).toEqual([]);
+  });
+
   it('keeps deterministic spelling on overlaps while retaining separate model issues', async () => {
     const issues = await check('I recieve mail.', DEFAULT_SETTINGS, [
       {

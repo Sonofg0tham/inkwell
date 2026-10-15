@@ -70,7 +70,7 @@ function wordPattern(source: string, flags = 'giu'): RegExp {
 }
 
 // Repeats that are correct English ("that that", "had had") or deliberate.
-const ALLOWED_REPEATS = new Set([
+export const ALLOWED_REPEATS: ReadonlySet<string> = new Set([
   'that', 'had', 'bye', 'very', 'so', 'really', 'ha', 'haha', 'no', 'yeah', 'yes',
   'knock', 'blah', 'now', 'there', 'well', 'far', 'more', 'many', 'much', 'again',
   'tut', 'tsk', 'chop', 'hush', 'aye', 'oh', 'ah', 'la', 'go', 'boo', 'ho', 'hip',

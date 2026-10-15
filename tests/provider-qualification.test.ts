@@ -206,6 +206,18 @@ describe('provider proofreading qualification', () => {
     expect(result.ok ? '' : result.hint).toMatch(/grammar/i);
   });
 
+  it('accepts a correct grammar fix that the model labelled as spelling', async () => {
+    // Small local models often call every mistake "spelling". Inkwell relabels
+    // real-word mistakes itself, so the model is judged on the fix it made.
+    const candidate = provider({
+      core: json([CORE_MODEL_ISSUES[0]!, { ...CORE_MODEL_ISSUES[1], type: 'spelling' }]),
+    });
+
+    await expect(qualifyProofreadingProvider(candidate, CONFIG, SETTINGS)).resolves.toEqual({
+      ok: true,
+    });
+  });
+
   it('rejects a model that misses the punctuation check with a clear reason', async () => {
     const candidate = provider({ punctuation: json([]) });
 
