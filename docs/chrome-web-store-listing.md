@@ -65,14 +65,14 @@ Do not claim that Inkwell handles no user data merely because local providers an
 
 Certify that data use is limited to the disclosed proofreading and document features, is not used for advertising or unrelated purposes, is not sold, and is not made available for human reading. Use the public privacy-policy URL:
 
-`https://github.com/Sonofg0tham/inkwell/blob/main/PRIVACY.md`
+`https://github.com/craigmccart/inkwell/blob/main/PRIVACY.md`
 
 ## Public links
 
-- Homepage: `https://github.com/Sonofg0tham/inkwell`
-- Support: `https://github.com/Sonofg0tham/inkwell/issues`
-- Security reports: `https://github.com/Sonofg0tham/inkwell/security/advisories/new`
-- Privacy policy: `https://github.com/Sonofg0tham/inkwell/blob/main/PRIVACY.md`
+- Homepage: `https://github.com/craigmccart/inkwell`
+- Support: `https://github.com/craigmccart/inkwell/issues`
+- Security reports: `https://github.com/craigmccart/inkwell/security/advisories/new`
+- Privacy policy: `https://github.com/craigmccart/inkwell/blob/main/PRIVACY.md`
 
 Craig can also verify `sonofg0tham.dev` in Google Search Console and use it as the official publisher URL.
 

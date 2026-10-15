@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please report suspected vulnerabilities through [GitHub's private security advisory form](https://github.com/Sonofg0tham/inkwell/security/advisories/new). Do not open a public issue for an unpatched vulnerability and do not include live API keys or somebody else's data.
+Please report suspected vulnerabilities through [GitHub's private security advisory form](https://github.com/craigmccart/inkwell/security/advisories/new). Do not open a public issue for an unpatched vulnerability and do not include live API keys or somebody else's data.
 
 Include the affected version, browser, reproduction steps, likely impact and any proof-of-concept material that is safe to share. Reports that explain the trust boundary or data path are especially useful.
 

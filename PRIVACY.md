@@ -60,4 +60,4 @@ If Inkwell's data handling changes, the extension will show an updated disclosur
 
 ## Contact
 
-For privacy questions, open an issue in the [Inkwell repository](https://github.com/Sonofg0tham/inkwell/issues). Do not include private text, credentials or API keys in a public issue.
+For privacy questions, open an issue in the [Inkwell repository](https://github.com/craigmccart/inkwell/issues). Do not include private text, credentials or API keys in a public issue.
