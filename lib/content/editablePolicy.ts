@@ -51,6 +51,11 @@ const CODE_EDITOR_CLASSES = new Set([
 const SENSITIVE_HINT =
   /(?:^|[\s_.:-])(?:user(?:name)?(?:[\s_-]*(?:input|field))?|login|account|full[\s_-]*name|first[\s_-]*name|last[\s_-]*name|given[\s_-]*name|family[\s_-]*name|address(?:[\s_-]*line\d*)?|street|post(?:al)?[\s_-]*code|zip(?:[\s_-]*code)?|password|passphrase|secret|token|api[\s_-]*key|private[\s_-]*key|pin|otp|cvv|cvc|ssn|national[\s_-]*insurance)(?:$|[\s_.:-])/i;
 
+// Rich-text editors that switch the browser's own spellchecker off by default
+// so it does not clash with their plugins, not because the text is private.
+// TinyMCE and CKEditor 4 both do this on every editor unless configured not to.
+const PROSE_EDITOR_CLASSES = new Set(['mce-content-body', 'cke_editable']);
+
 function* composedAncestors(element: Element): Generator<Element> {
   let current: Element | null = element;
   while (current) {
@@ -106,7 +111,13 @@ function isExcludedByAncestor(element: Element): boolean {
     if (ancestor.hasAttribute('data-inkwell-disable')) return true;
     if (!spellcheckResolved) {
       const spellcheck = ancestor.getAttribute('spellcheck')?.toLowerCase();
-      if (spellcheck === 'false') return true;
+      if (spellcheck === 'false') {
+        const proseEditor = Array.from(ancestor.classList).some((name) =>
+          PROSE_EDITOR_CLASSES.has(name),
+        );
+        if (!proseEditor) return true;
+        spellcheckResolved = true;
+      }
       if (spellcheck === 'true' || spellcheck === '') spellcheckResolved = true;
     }
     if (ancestor.tagName === 'CODE' || ancestor.tagName === 'PRE') return true;

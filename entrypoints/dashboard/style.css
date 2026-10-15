@@ -876,6 +876,12 @@ input, select, textarea { font: inherit; }
   gap: 10px;
 }
 
+/* The list scrolls. Without this, cards with overflow: hidden shrink to fit
+   the panel and a long list shows only each card's type label. */
+.suggestions-list > * {
+  flex-shrink: 0;
+}
+
 /* ── Suggestion card ── */
 .suggestion-card {
   background: var(--ink-bg);

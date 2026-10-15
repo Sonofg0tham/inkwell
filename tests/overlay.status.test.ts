@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { destroyOverlayHost, getOverlayHost } from '../lib/content/overlay/host';
 import { OverlayStatus } from '../lib/content/overlay/status';
 
@@ -60,7 +60,7 @@ describe('overlay check status announcements', () => {
     });
 
     expect(host.statusLayer.textContent).toBe(
-      'Check incomplete. 1 suggestion available. The contextual check was unavailable. Local model unavailable.',
+      '1 suggestion. Offline check only, your model is unavailable.',
     );
   });
 
@@ -73,6 +73,64 @@ describe('overlay check status announcements', () => {
     expect(host.statusLayer.dataset.state).toBe('error');
     expect(host.statusLayer.textContent).toBe('Check failed. <img src=x onerror=alert(1)>');
     expect(host.statusLayer.querySelector('img')).toBeNull();
+  });
+
+  it('fades a clean result but keeps problems on screen', () => {
+    vi.useFakeTimers();
+    try {
+      const host = getOverlayHost();
+      const status = new OverlayStatus(host);
+
+      status.announce({ state: 'checked', issueCount: 0 });
+      vi.advanceTimersByTime(3_000);
+      expect(host.statusLayer.hidden).toBe(true);
+
+      // Re-rendering the same result after scrolling does not flash it back.
+      status.announce({ state: 'checked', issueCount: 0 });
+      expect(host.statusLayer.hidden).toBe(true);
+
+      status.announce({ state: 'checked', issueCount: 2 });
+      expect(host.statusLayer.hidden).toBe(false);
+
+      status.announce({ state: 'error', message: 'Could not reach the local model.' });
+      vi.advanceTimersByTime(10_000);
+      expect(host.statusLayer.hidden).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lets the person close the pill, after which only a new error returns', () => {
+    const host = getOverlayHost();
+    const status = new OverlayStatus(host);
+
+    expect(host.statusClose.getAttribute('aria-label')).toContain('Hide');
+    expect(host.statusClose.textContent).toBe('');
+
+    status.announce({ state: 'partial', issueCount: 1, droppedCount: 0, message: 'Offline.' });
+    host.statusClose.click();
+    expect(host.statusLayer.hidden).toBe(true);
+
+    status.announce({ state: 'checking' });
+    status.announce({ state: 'checked', issueCount: 3 });
+    expect(host.statusLayer.hidden).toBe(true);
+
+    status.announce({ state: 'error', message: 'Could not reach the local model.' });
+    expect(host.statusLayer.hidden).toBe(false);
+    host.statusClose.click();
+    status.announce({ state: 'error', message: 'Could not reach the local model.' });
+    expect(host.statusLayer.hidden).toBe(true);
+
+    status.announce({ state: 'error', message: 'The API key was rejected.' });
+    expect(host.statusLayer.hidden).toBe(false);
+  });
+
+  it('keeps focus in the field when the close button is pressed', () => {
+    const host = getOverlayHost();
+    new OverlayStatus(host);
+    const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    host.statusClose.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
   });
 
   it('shows checker failures beside the active field instead of hiding them visually', () => {

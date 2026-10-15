@@ -237,7 +237,7 @@ describe('FieldController lifecycle', () => {
     await vi.runAllTimersAsync();
 
     expect(getOverlayHost().statusLayer.dataset.state).toBe('partial');
-    expect(getOverlayHost().statusLayer.textContent).toContain('contextual');
+    expect(getOverlayHost().statusLayer.textContent).toContain('Offline check only');
     expect(runtime.reportStatus).toHaveBeenLastCalledWith(expect.objectContaining({
       phase: 'partial',
       hint: 'Local model unavailable.',

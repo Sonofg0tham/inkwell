@@ -23,16 +23,147 @@ type Dialect = Settings['dialect'];
 const MAX_LOCAL_ISSUES = 100;
 const WORD = /[\p{L}]+(?:['\u2019-][\p{L}]+)*/gu;
 
+// Frequent misspellings with one obvious correction. These are checked before
+// the dictionary pass, so they are caught even at the start of a sentence,
+// where capitalised unknown words are otherwise skipped as likely names.
 const COMMON_MISSPELLINGS: Readonly<Record<string, string>> = {
+  accomodate: 'accommodate',
+  accomodation: 'accommodation',
+  acheive: 'achieve',
+  acheived: 'achieved',
+  acknowlege: 'acknowledge',
+  adress: 'address',
+  agressive: 'aggressive',
   alot: 'a lot',
+  apparantly: 'apparently',
+  appearence: 'appearance',
+  arguement: 'argument',
+  basicly: 'basically',
+  begining: 'beginning',
   beleive: 'believe',
+  beleived: 'believed',
+  belive: 'believe',
+  buisness: 'business',
+  calender: 'calendar',
+  cemetary: 'cemetery',
+  collegue: 'colleague',
+  collegues: 'colleagues',
+  comming: 'coming',
+  commitee: 'committee',
+  completly: 'completely',
+  concious: 'conscious',
   definately: 'definitely',
+  definatly: 'definitely',
+  definitly: 'definitely',
+  dissapoint: 'disappoint',
+  dissapointed: 'disappointed',
+  embarass: 'embarrass',
+  embarassed: 'embarrassed',
+  embarassing: 'embarrassing',
+  enviroment: 'environment',
+  excercise: 'exercise',
+  existance: 'existence',
+  experiance: 'experience',
+  familar: 'familiar',
+  finaly: 'finally',
+  foriegn: 'foreign',
+  freind: 'friend',
+  freinds: 'friends',
+  goverment: 'government',
+  grammer: 'grammar',
+  gaurd: 'guard',
+  happend: 'happened',
+  harrass: 'harass',
+  immediatly: 'immediately',
+  independant: 'independent',
+  interupt: 'interrupt',
+  knowlege: 'knowledge',
+  liase: 'liaise',
+  libary: 'library',
+  maintainance: 'maintenance',
+  mispell: 'misspell',
+  neccessary: 'necessary',
+  necessery: 'necessary',
+  noticable: 'noticeable',
+  occassion: 'occasion',
+  occassionally: 'occasionally',
   occured: 'occurred',
+  occurence: 'occurrence',
+  occuring: 'occurring',
+  persistant: 'persistent',
+  posession: 'possession',
+  prefered: 'preferred',
+  probaly: 'probably',
+  publically: 'publicly',
+  realy: 'really',
+  reccomend: 'recommend',
+  recomend: 'recommend',
   recieve: 'receive',
+  recieved: 'received',
+  refered: 'referred',
+  relevent: 'relevant',
+  remeber: 'remember',
+  resistence: 'resistance',
+  responsability: 'responsibility',
+  rythm: 'rhythm',
+  sentance: 'sentence',
   seperate: 'separate',
+  seperately: 'separately',
+  sincerly: 'sincerely',
+  speach: 'speech',
+  succesful: 'successful',
+  successfull: 'successful',
+  suprise: 'surprise',
+  suprised: 'surprised',
   teh: 'the',
+  tendancy: 'tendency',
+  thier: 'their',
+  threshhold: 'threshold',
+  tomorow: 'tomorrow',
   tommorow: 'tomorrow',
+  tommorrow: 'tomorrow',
+  tounge: 'tongue',
+  truely: 'truly',
+  unfortunatly: 'unfortunately',
+  untill: 'until',
+  wether: 'whether',
+  wich: 'which',
   wierd: 'weird',
+  writting: 'writing',
+};
+
+// Contractions typed without their apostrophe. Words that are also real
+// words without one (cant, wont, lets, its, well, were, shed, hell) are left
+// to the grammar rules or the model.
+const MISSING_APOSTROPHES: Readonly<Record<string, string>> = {
+  arent: "aren't",
+  couldnt: "couldn't",
+  didnt: "didn't",
+  doesnt: "doesn't",
+  dont: "don't",
+  hadnt: "hadn't",
+  hasnt: "hasn't",
+  havent: "haven't",
+  im: "I'm",
+  isnt: "isn't",
+  ive: "I've",
+  mightnt: "mightn't",
+  mustnt: "mustn't",
+  shouldnt: "shouldn't",
+  thats: "that's",
+  theres: "there's",
+  theyd: "they'd",
+  theyll: "they'll",
+  theyre: "they're",
+  theyve: "they've",
+  wasnt: "wasn't",
+  werent: "weren't",
+  whats: "what's",
+  wouldnt: "wouldn't",
+  youd: "you'd",
+  youll: "you'll",
+  youre: "you're",
+  youve: "you've",
 };
 
 const BRITISH_FORMS: Readonly<Record<string, string>> = {
@@ -126,6 +257,59 @@ function getSpeller(dialect: Dialect): SpellChecker {
   const checker = nspell(dictionary.aff, dictionary.dic) as SpellChecker;
   SPELLERS.set(dialect, checker);
   return checker;
+}
+
+// Dictionaries to compare against when a model swaps in another region's
+// spelling. Canadian English mixes British and American forms, so it checks both.
+const OTHER_DIALECTS: Readonly<Record<Dialect, readonly Dialect[]>> = {
+  'en-US': ['en-GB'],
+  'en-GB': ['en-US'],
+  'en-CA': ['en-US', 'en-GB'],
+  'en-AU': ['en-US'],
+  'en-IN': ['en-US'],
+};
+
+/** Words in `text`, with hyphenated compounds split, ready for a dictionary. */
+function dictionaryWords(text: string): string[] {
+  return [...text.matchAll(WORD)].flatMap((match) =>
+    match[0].replaceAll('’', "'").split('-').filter(Boolean),
+  );
+}
+
+/**
+ * Acronyms, mixed-case product names and non-English letters are outside what
+ * an English dictionary can judge, so they count as known.
+ */
+function outsideDictionary(word: string): boolean {
+  return (
+    /[^\x00-\x7F]/.test(word) ||
+    (word.length > 1 && word === word.toLocaleUpperCase('en')) ||
+    isMixedCase(word)
+  );
+}
+
+function knownWord(word: string, dialect: Dialect, personal: ReadonlySet<string>): boolean {
+  if (personal.has(normalisePersonalWord(word)) || outsideDictionary(word)) return true;
+  return getSpeller(dialect).correct(word);
+}
+
+/** True when the writer's dictionary, or their personal one, knows every word in `text`. */
+export function knowsEveryWord(text: string, settings: Settings): boolean {
+  const personal = new Set((settings.personalDictionary ?? []).map(normalisePersonalWord));
+  return dictionaryWords(text).every((word) => knownWord(word, settings.dialect, personal));
+}
+
+/**
+ * Words the writer's dialect rejects but another major English dictionary
+ * accepts, such as "color" for someone writing British English.
+ */
+export function otherDialectWords(text: string, settings: Settings): string[] {
+  const personal = new Set((settings.personalDictionary ?? []).map(normalisePersonalWord));
+  return dictionaryWords(text).filter(
+    (word) =>
+      !knownWord(word, settings.dialect, personal) &&
+      OTHER_DIALECTS[settings.dialect].some((other) => getSpeller(other).correct(word)),
+  );
 }
 
 function collectPatternRanges(
@@ -253,9 +437,12 @@ export function findLocalSpellingIssues(text: string, settings: Settings): Issue
     const normalized = original.replaceAll('\u2019', "'").toLocaleLowerCase('en');
     if (personal.has(normalized)) continue;
 
-    let replacement = COMMON_MISSPELLINGS[normalized] ?? regional[normalized];
+    let replacement =
+      COMMON_MISSPELLINGS[normalized] ?? MISSING_APOSTROPHES[normalized] ?? regional[normalized];
     let explanation = 'Possible spelling mistake.';
-    if (regional[normalized]) {
+    if (MISSING_APOSTROPHES[normalized]) {
+      explanation = 'Add the missing apostrophe.';
+    } else if (regional[normalized]) {
       explanation = `Use the ${DIALECT_LABELS[settings.dialect]} spelling.`;
     }
 
@@ -284,14 +471,15 @@ function normalisePersonalWord(word: string): string {
 }
 
 /** A model does not get to override the user's explicit dictionary choice. */
-export function filterPersonalDictionaryIssues(
-  issues: IssueDto[],
+export function filterPersonalDictionaryIssues<T extends Pick<IssueDto, 'type' | 'original'>>(
+  issues: T[],
   settings: Settings,
-): IssueDto[] {
+): T[] {
   const personal = new Set((settings.personalDictionary ?? []).map(normalisePersonalWord));
   if (personal.size === 0) return issues;
   return issues.filter(
-    (issue) => issue.type !== 'spelling' || !personal.has(normalisePersonalWord(issue.original)),
+    (issue) =>
+      issue.type !== 'spelling' || !personal.has(normalisePersonalWord(issue.original.trim())),
   );
 }
 

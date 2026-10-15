@@ -1,4 +1,5 @@
 import { anchorIssues } from '../checker/anchor';
+import { reviewPlacedIssues, reviewModelIssues } from '../checker/modelReview';
 import { buildMessages } from '../checker/prompt';
 import { extractJson, ISSUE_JSON_SCHEMA, parseIssuesDetailed } from '../checker/schema';
 import type { Settings } from '../settings/schema';
@@ -93,13 +94,19 @@ async function runProbe(
     );
   }
 
-  const anchored = anchorIssues(passage, parsed.issues, ALL_CATEGORIES);
+  // Judge the model on what a writer would actually see, after the same
+  // review that every real check applies.
+  const anchored = anchorIssues(
+    passage,
+    reviewModelIssues(parsed.issues, settings),
+    ALL_CATEGORIES,
+  );
   if (anchored.dropped > 0) {
     return unsuitable(
       'Connected, but the model quoted text Inkwell could not locate in its test passage. Choose a stronger instruct model.',
     );
   }
-  return { ok: true, issues: anchored.issues };
+  return { ok: true, issues: reviewPlacedIssues(passage, anchored.issues) };
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   mergeLocalSpellingIssues,
 } from './localSpelling';
 import { findLocalRuleIssues } from './localRules';
+import { reviewPlacedIssues, reviewModelIssues } from './modelReview';
 import { buildMessages } from './prompt';
 import { ISSUE_JSON_SCHEMA, parseIssuesDetailed } from './schema';
 
@@ -340,9 +341,11 @@ export class CheckService {
         apiKey: await loadSecret(settings.provider.kind),
       };
       if (item.controller.signal.aborted) return;
+      // Context-aware rules win over the plain spelling pass where they
+      // overlap, so "she dont" becomes "doesn't" rather than "don't".
       const localIssues = mergeLocalSpellingIssues(
-        findLocalSpellingIssues(item.text, settings),
         findLocalRuleIssues(item.text, settings),
+        findLocalSpellingIssues(item.text, settings),
       );
       const provider = getProvider(cfg.kind);
       let responseText: string;
@@ -379,10 +382,16 @@ export class CheckService {
         settings.strictness === 'standard'
           ? { ...settings.categories, style: false }
           : settings.categories;
-      const anchored = anchorIssues(item.text, parsed.issues, effectiveCategories);
+      // The personal dictionary applies to the model's own label, before a
+      // review can relabel a saved word's "spelling" issue as grammar.
+      const anchored = anchorIssues(
+        item.text,
+        reviewModelIssues(filterPersonalDictionaryIssues(parsed.issues, settings), settings),
+        effectiveCategories,
+      );
       const issues = mergeLocalSpellingIssues(
         localIssues,
-        filterPersonalDictionaryIssues(anchored.issues, settings),
+        filterPersonalDictionaryIssues(reviewPlacedIssues(item.text, anchored.issues), settings),
       );
       // Malformed items and unplaceable items are both "the model found
       // something we can't show you" — they must reach the UI the same way.

@@ -69,9 +69,12 @@ async function init(): Promise<void> {
     } else if (state.checkPhase === 'checking') {
       issueLine.textContent = 'Checking this page…';
     } else if (state.checkPhase === 'partial') {
-      issueLine.textContent = state.issueCount > 0
-        ? `${state.issueCount} suggestion${state.issueCount === 1 ? '' : 's'}, but part of the check could not be verified`
+      const found = state.issueCount > 0
+        ? `${state.issueCount} suggestion${state.issueCount === 1 ? '' : 's'}, but part of the check could not be verified.`
         : 'Check incomplete. Some writing could not be verified.';
+      // The page shows only a short line, so the provider's explanation
+      // (for example how to start Ollama) belongs here.
+      issueLine.textContent = state.checkHint ? `${found} ${state.checkHint}` : found;
     } else if (state.checkPhase === 'checked') {
       issueLine.textContent = state.issueCount > 0
         ? `${state.issueCount} suggestion${state.issueCount === 1 ? '' : 's'} on this page`
