@@ -340,9 +340,11 @@ export class CheckService {
         apiKey: await loadSecret(settings.provider.kind),
       };
       if (item.controller.signal.aborted) return;
+      // Context-aware rules win over the plain spelling pass where they
+      // overlap, so "she dont" becomes "doesn't" rather than "don't".
       const localIssues = mergeLocalSpellingIssues(
-        findLocalSpellingIssues(item.text, settings),
         findLocalRuleIssues(item.text, settings),
+        findLocalSpellingIssues(item.text, settings),
       );
       const provider = getProvider(cfg.kind);
       let responseText: string;
