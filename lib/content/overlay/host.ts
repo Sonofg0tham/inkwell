@@ -142,6 +142,40 @@ const OVERLAY_CSS = `
 .ink-status[hidden] {
   display: none;
 }
+.ink-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.ink-status-text {
+  flex: 1;
+}
+.ink-status-close {
+  all: unset;
+  flex: none;
+  box-sizing: border-box;
+  width: 18px;
+  height: 18px;
+  margin: -2px -4px -2px 0;
+  border-radius: 4px;
+  display: grid;
+  place-items: center;
+  font: 600 14px/1 -apple-system, 'Segoe UI', system-ui, sans-serif;
+  color: #6b6455;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ink-status-close::before {
+  content: '×';
+}
+.ink-status-close:hover {
+  background: #efe7d6;
+  color: #3f3b32;
+}
+.ink-status-close:focus-visible {
+  outline: 2px solid #9b3c1f;
+  outline-offset: 1px;
+}
 .ink-status[data-state='checking'] {
   border-color: #b8a98d;
 }
@@ -174,8 +208,12 @@ export interface OverlayHost {
   segLayer: HTMLDivElement;
   /** Container for the suggestion card. */
   cardLayer: HTMLDivElement;
-  /** Screen-reader status updates for the active checker. */
+  /** Check status beside the active field, also a polite live region. */
   statusLayer: HTMLDivElement;
+  /** The status message itself. */
+  statusText: HTMLSpanElement;
+  /** Hides the status pill. It has an accessible name but no text. */
+  statusClose: HTMLButtonElement;
   /** Hidden measurement area (textarea mirror). */
   measureLayer: HTMLDivElement;
 }
@@ -202,11 +240,28 @@ export function getOverlayHost(): OverlayHost {
   statusLayer.setAttribute('aria-live', 'polite');
   statusLayer.setAttribute('aria-atomic', 'true');
   statusLayer.hidden = true;
+  const statusText = document.createElement('span');
+  statusText.className = 'ink-status-text';
+  const statusClose = document.createElement('button');
+  statusClose.type = 'button';
+  statusClose.className = 'ink-status-close';
+  statusClose.setAttribute('aria-label', 'Hide Inkwell status messages on this page');
+  statusClose.title = 'Hide status messages on this page';
+  statusLayer.append(statusText, statusClose);
   const measureLayer = document.createElement('div');
   layer.append(segLayer, cardLayer, statusLayer, measureLayer);
   root.append(style, layer);
   document.documentElement.appendChild(hostEl);
-  singleton = { hostEl, root, segLayer, cardLayer, statusLayer, measureLayer };
+  singleton = {
+    hostEl,
+    root,
+    segLayer,
+    cardLayer,
+    statusLayer,
+    statusText,
+    statusClose,
+    measureLayer,
+  };
   return singleton;
 }
 

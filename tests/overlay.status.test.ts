@@ -100,6 +100,39 @@ describe('overlay check status announcements', () => {
     }
   });
 
+  it('lets the person close the pill, after which only a new error returns', () => {
+    const host = getOverlayHost();
+    const status = new OverlayStatus(host);
+
+    expect(host.statusClose.getAttribute('aria-label')).toContain('Hide');
+    expect(host.statusClose.textContent).toBe('');
+
+    status.announce({ state: 'partial', issueCount: 1, droppedCount: 0, message: 'Offline.' });
+    host.statusClose.click();
+    expect(host.statusLayer.hidden).toBe(true);
+
+    status.announce({ state: 'checking' });
+    status.announce({ state: 'checked', issueCount: 3 });
+    expect(host.statusLayer.hidden).toBe(true);
+
+    status.announce({ state: 'error', message: 'Could not reach the local model.' });
+    expect(host.statusLayer.hidden).toBe(false);
+    host.statusClose.click();
+    status.announce({ state: 'error', message: 'Could not reach the local model.' });
+    expect(host.statusLayer.hidden).toBe(true);
+
+    status.announce({ state: 'error', message: 'The API key was rejected.' });
+    expect(host.statusLayer.hidden).toBe(false);
+  });
+
+  it('keeps focus in the field when the close button is pressed', () => {
+    const host = getOverlayHost();
+    new OverlayStatus(host);
+    const event = new MouseEvent('mousedown', { bubbles: true, cancelable: true });
+    host.statusClose.dispatchEvent(event);
+    expect(event.defaultPrevented).toBe(true);
+  });
+
   it('shows checker failures beside the active field instead of hiding them visually', () => {
     const host = getOverlayHost();
     const status = new OverlayStatus(host);

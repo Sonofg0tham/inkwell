@@ -11,22 +11,69 @@ function countLabel(count: number, singular: string, plural: string): string {
   return `${count} ${count === 1 ? singular : plural}`;
 }
 
-// A clean result needs no lingering pill over the page. Problems stay visible.
-const CHECKED_VISIBLE_MS = 2_500;
+// Informational results fade on their own. Errors stay until dismissed.
+const FADE_AFTER_MS: Partial<Record<OverlayStatusUpdate['state'], number>> = {
+  checked: 2_500,
+  partial: 6_000,
+};
+
+interface QuietState {
+  /** The person closed the pill: stop showing progress on this page. */
+  quiet: boolean;
+  /** An error they closed. A different error still appears. */
+  dismissedError: string | null;
+}
+
+// Keyed by overlay host, so the choice lasts until the page's overlay is
+// torn down (a reload, or Inkwell being switched off for the site).
+const quietByHost = new WeakMap<OverlayHost, QuietState>();
+
+function quietState(host: OverlayHost): QuietState {
+  let state = quietByHost.get(host);
+  if (!state) {
+    state = { quiet: false, dismissedError: null };
+    quietByHost.set(host, state);
+  }
+  return state;
+}
 
 /** Announces checker progress beside the active field. */
 export class OverlayStatus {
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
   private lastMessage = '';
 
-  constructor(private host: OverlayHost) {}
+  constructor(private host: OverlayHost) {
+    // Keep the caret in the field: closing the pill must not move focus.
+    host.statusClose.onmousedown = (event) => event.preventDefault();
+    host.statusClose.onclick = () => {
+      const state = quietState(host);
+      state.quiet = true;
+      if (host.statusLayer.dataset.state === 'error') {
+        state.dismissedError = host.statusText.textContent;
+      }
+      this.cancelHide();
+      host.statusLayer.hidden = true;
+    };
+  }
 
   announce(update: OverlayStatusUpdate, anchor?: Rect): void {
     const layer = this.host.statusLayer;
     const message = this.message(update);
-    // Scrolling and resizing re-render the same result. Once a clean result
-    // has faded, repeating it would only flash the pill again.
-    if (update.state === 'checked' && message === this.lastMessage && layer.dataset.state === 'checked') {
+    // Once closed, only a new error comes back. Underlines and the toolbar
+    // badge still show every suggestion.
+    const quiet = quietState(this.host);
+    if (update.state === 'error' ? quiet.dismissedError === message : quiet.quiet) {
+      this.cancelHide();
+      layer.hidden = true;
+      return;
+    }
+    // Scrolling and resizing re-render the same result. Once it has faded,
+    // repeating it would only flash the pill again.
+    if (
+      (update.state === 'checked' || update.state === 'partial') &&
+      message === this.lastMessage &&
+      layer.dataset.state === update.state
+    ) {
       if (!layer.hidden) this.position(anchor);
       return;
     }
@@ -35,14 +82,15 @@ export class OverlayStatus {
     layer.hidden = false;
     layer.dataset.state = update.state;
     layer.setAttribute('role', update.state === 'error' ? 'alert' : 'status');
-    layer.textContent = message;
+    this.host.statusText.textContent = message;
     // Position after the text is in place so the real height is measured.
     this.position(anchor);
-    if (update.state === 'checked') {
+    const fadeAfter = FADE_AFTER_MS[update.state];
+    if (fadeAfter !== undefined) {
       this.hideTimer = setTimeout(() => {
         this.hideTimer = null;
         layer.hidden = true;
-      }, CHECKED_VISIBLE_MS);
+      }, fadeAfter);
     }
   }
 
@@ -85,7 +133,7 @@ export class OverlayStatus {
     this.lastMessage = '';
     const layer = this.host.statusLayer;
     layer.hidden = true;
-    layer.textContent = '';
+    this.host.statusText.textContent = '';
     delete layer.dataset.state;
     layer.setAttribute('role', 'status');
   }
